@@ -194,7 +194,8 @@ const DossierDetail: React.FC = () => {
 
         // Optimistically update UI to 'pending'
         const optimisticSupports = dossier.supports.map(s => s.id === supportId ? {
-            ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'pending', result: '', timestamp: serverTimestamp() } } : ev)
+            // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
+            ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'pending' as 'pending', result: '', timestamp: serverTimestamp() } } : ev)
         } : s);
         await updateSupports(optimisticSupports);
 
@@ -225,14 +226,16 @@ const DossierDetail: React.FC = () => {
             const analysisResult = genAIResponse.text;
             
             const finalSupports = dossier.supports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'completed', result: analysisResult, timestamp: serverTimestamp() } } : ev)
+                // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
+                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'completed' as 'completed', result: analysisResult, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(finalSupports);
 
         } catch (err) {
             console.error("Error analyzing evidence:", err);
             const errorSupports = dossier.supports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed', result: (err as Error).message, timestamp: serverTimestamp() } } : ev)
+                // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
+                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: (err as Error).message, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(errorSupports);
         } finally {

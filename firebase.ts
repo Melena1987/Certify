@@ -1,4 +1,3 @@
-
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
@@ -6,12 +5,12 @@ import { getStorage } from "firebase/storage";
 
 // IMPORTANT: Replace with your app's Firebase project configuration
 const firebaseConfig = {
-  apiKey: process.env.API_KEY || "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDLB-Nse95J12bG88sUz-1FFYlh2N97sz4",
+  authDomain: "certify-diputacion.firebaseapp.com",
+  projectId: "certify-diputacion",
+  storageBucket: "certify-diputacion.appspot.com",
+  messagingSenderId: "52185000301",
+  appId: "1:52185000301:web:e48e113f179adbecbb1264"
 };
 
 // Initialize Firebase
