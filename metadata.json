@@ -1,0 +1,5 @@
+{
+  "name": "Certify",
+  "description": "A platform for entities sponsored by the 'Diputación' to digitally justify advertising materials for their events, replacing the manual Word-based process. Users can upload proofs (links and images) for each type of advertising support defined in their contract.",
+  "requestFramePermissions": []
+}
