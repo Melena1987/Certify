@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -230,9 +231,14 @@ const DossierDetail: React.FC = () => {
 
         } catch (err) {
             console.error("Error analyzing evidence:", err);
+            const errorMessage = (err as Error).message;
+            const userFriendlyError = errorMessage.toLowerCase().includes('api key')
+                ? "Error de configuración: La clave de API de Gemini no está disponible. Contacta al administrador."
+                : `Análisis fallido: ${errorMessage}`;
+
             const errorSupports = dossier.supports.map(s => s.id === supportId ? {
                 // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: (err as Error).message, timestamp: serverTimestamp() } } : ev)
+                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: userFriendlyError, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(errorSupports);
         } finally {
