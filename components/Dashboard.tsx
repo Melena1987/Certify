@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -10,6 +11,7 @@ import Spinner from './Spinner';
 import { Plus, X, Calendar, FileText, ChevronsRight, FileUp, Sparkles } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SUPPORT_TYPES } from '../constants';
+import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: string } = {
     [DossierStatus.DRAFT]: 'bg-yellow-100 text-yellow-800',
@@ -93,6 +95,7 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
     const [contractFile, setContractFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { apiKey } = useApiKey();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -117,6 +120,11 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
             setError('Debes seleccionar un archivo de contrato.');
             return;
         }
+        if (!apiKey) {
+            setError('La clave de API para la IA no está disponible. No se puede procesar el contrato.');
+            return;
+        }
+
         setLoading(true);
         setError('');
 
@@ -150,7 +158,7 @@ Devuelve tu respuesta EXCLUSIVAMENTE en formato JSON. La estructura debe ser:
 Si no encuentras algún dato, déjalo como un string vacío. Si no identificas soportes, devuelve un array vacío.`
             };
             
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [filePart, textPart] },
@@ -208,11 +216,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
         } catch (err) {
             console.error("Error creating dossier with AI: ", err);
             const errorMessage = (err as Error).message;
-            if (errorMessage.toLowerCase().includes('api key')) {
-                 setError("Error de configuración: La clave de API de Gemini no está disponible. Contacta al administrador.");
-            } else {
-                 setError(`Error al procesar el documento: ${errorMessage}`);
-            }
+            setError(`Error al procesar el documento: ${errorMessage}`);
         } finally {
             setLoading(false);
         }
@@ -245,7 +249,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
                     </div>
                     <div className="flex justify-end space-x-3">
                         <button type="button" onClick={handleClose} className="py-2 px-4 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Cancelar</button>
-                        <button type="submit" disabled={loading} className="py-2 px-4 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition flex items-center min-w-[150px] justify-center">
+                        <button type="submit" disabled={loading || !apiKey} className="py-2 px-4 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition flex items-center min-w-[150px] justify-center disabled:bg-slate-400 disabled:cursor-not-allowed">
                             {loading ? <><Spinner className="h-5 w-5 mr-2" /> <span>Analizando...</span></> : <><Sparkles size={16} className="mr-2"/><span>Analizar y Crear</span></>}
                         </button>
                     </div>

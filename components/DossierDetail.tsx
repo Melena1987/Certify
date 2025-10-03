@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -13,6 +14,7 @@ import Spinner from './Spinner';
 // FIX: Import GoogleGenAI for Gemini API usage
 import { GoogleGenAI } from '@google/genai';
 import { ArrowLeft, Paperclip, Link as LinkIcon, Upload, X, Plus, Trash2, Sparkles, AlertTriangle, CheckCircle, Clock, FileText } from 'lucide-react';
+import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
     [DossierStatus.DRAFT]: { container: 'border-yellow-300 bg-yellow-50', text: 'text-yellow-700' },
@@ -55,6 +57,7 @@ const DossierDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
+    const { apiKey } = useApiKey();
     const [dossier, setDossier] = useState<Dossier | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -200,8 +203,18 @@ const DossierDetail: React.FC = () => {
         } : s);
         await updateSupports(optimisticSupports);
 
+        if (!apiKey) {
+            console.error("API Key not available for analysis.");
+            const errorSupports = dossier.supports.map(s => s.id === supportId ? {
+                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: 'Análisis fallido: La clave de API no está configurada.', timestamp: serverTimestamp() } } : ev)
+            } : s);
+            await updateSupports(errorSupports);
+            setAnalyzing(prev => ({ ...prev, [evidenceId]: false }));
+            return;
+        }
+
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey: apiKey });
             
             const response = await fetch(evidence.value);
             const blob = await response.blob();
@@ -223,7 +236,10 @@ const DossierDetail: React.FC = () => {
             
             const analysisResult = genAIResponse.text;
             
-            const finalSupports = dossier.supports.map(s => s.id === supportId ? {
+            const currentDoc = await onSnapshot(doc(db, 'dossiers', dossier.id), (d) => d.data());
+            const latestSupports = (currentDoc as Dossier)?.supports || dossier.supports;
+
+            const finalSupports = latestSupports.map(s => s.id === supportId ? {
                 // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
                 ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'completed' as 'completed', result: analysisResult, timestamp: serverTimestamp() } } : ev)
             } : s);
@@ -232,11 +248,12 @@ const DossierDetail: React.FC = () => {
         } catch (err) {
             console.error("Error analyzing evidence:", err);
             const errorMessage = (err as Error).message;
-            const userFriendlyError = errorMessage.toLowerCase().includes('api key')
-                ? "Error de configuración: La clave de API de Gemini no está disponible. Contacta al administrador."
-                : `Análisis fallido: ${errorMessage}`;
+            const userFriendlyError = `Análisis fallido: ${errorMessage}`;
+            
+            const currentDoc = await onSnapshot(doc(db, 'dossiers', dossier.id), (d) => d.data());
+            const latestSupports = (currentDoc as Dossier)?.supports || dossier.supports;
 
-            const errorSupports = dossier.supports.map(s => s.id === supportId ? {
+            const errorSupports = latestSupports.map(s => s.id === supportId ? {
                 // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
                 ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: userFriendlyError, timestamp: serverTimestamp() } } : ev)
             } : s);
@@ -298,6 +315,7 @@ const DossierDetail: React.FC = () => {
                         isUploading={isUploading === support.id}
                         analyzing={analyzing}
                         isEditable={dossier.status === DossierStatus.DRAFT}
+                        apiKeyAvailable={!!apiKey}
                     />
                 ))}
             </div>
@@ -338,9 +356,10 @@ interface SupportCardProps {
     isUploading: boolean;
     analyzing: Record<string, boolean>;
     isEditable: boolean;
+    apiKeyAvailable: boolean;
 }
 
-const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, onAnalyzeEvidence, isUploading, analyzing, isEditable }) => {
+const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, onAnalyzeEvidence, isUploading, analyzing, isEditable, apiKeyAvailable }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
     const [urlValue, setUrlValue] = useState('');
@@ -390,8 +409,9 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
                                 {isEditable && !evidence.analysis && (
                                     <button 
                                         onClick={() => onAnalyzeEvidence(evidence.id)} 
-                                        disabled={analyzing[evidence.id]}
-                                        className="mt-3 flex items-center space-x-2 text-sm bg-sky-100 text-sky-700 hover:bg-sky-200 font-semibold py-1 px-3 rounded-md transition"
+                                        disabled={analyzing[evidence.id] || !apiKeyAvailable}
+                                        className="mt-3 flex items-center space-x-2 text-sm bg-sky-100 text-sky-700 hover:bg-sky-200 font-semibold py-1 px-3 rounded-md transition disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
+                                        title={!apiKeyAvailable ? "La funcionalidad de IA no está disponible debido a un problema de configuración." : "Analizar con IA"}
                                     >
                                         {analyzing[evidence.id] ? <Spinner className="h-4 w-4" /> : <Sparkles size={16} />}
                                         <span>Analizar con IA</span>
