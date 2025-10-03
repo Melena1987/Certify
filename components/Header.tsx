@@ -19,9 +19,16 @@ const Header: React.FC = () => {
     <header className="bg-white shadow-md sticky top-0 z-10">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-3">
-            <ShieldCheck className="h-8 w-8 text-sky-600" />
-            <span className="text-2xl font-bold text-slate-800">Certify</span>
+          <div className="flex items-center">
+            <img
+              src="https://firebasestorage.googleapis.com/v0/b/certify-diputacion.appspot.com/o/recursos%2Fmarca_mlg_compite_diputacion_monocromatico_azul.png?alt=media&token=f2295896-b2f4-44c2-a3f8-8f895e994eb8"
+              alt="Logo de la Diputación de Málaga"
+              className="h-12 mr-4"
+            />
+            <div className="flex items-center space-x-3">
+              <ShieldCheck className="h-8 w-8 text-sky-600" />
+              <span className="text-2xl font-bold text-slate-800">Certify</span>
+            </div>
           </div>
           {currentUser && (
             <div className="flex items-center space-x-4">
