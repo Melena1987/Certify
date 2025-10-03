@@ -121,10 +121,6 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
         setError('');
 
         try {
-            if (!process.env.API_KEY) {
-                throw new Error("La clave de API de Gemini no está configurada.");
-            }
-            
             const fileAsBase64 = await new Promise<string>((resolve, reject) => {
                 const reader = new FileReader();
                 reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
@@ -182,7 +178,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
             const { eventName: extractedEventName, eventDate: extractedEventDate, soportes: identifiedSupports } = result;
 
             if (!extractedEventName || !extractedEventDate) {
-                throw new Error("No se pudo extraer el nombre o la fecha del evento del contrato. Asegúrate de que el PDF sea claro y legible.");
+                throw new Error("No se pudo extraer el nombre o la fecha del evento. Asegúrate de que el PDF sea claro y legible.");
             }
 
             if (!identifiedSupports || identifiedSupports.length === 0) {
@@ -211,7 +207,12 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
 
         } catch (err) {
             console.error("Error creating dossier with AI: ", err);
-            setError(`Error: ${(err as Error).message}. Asegúrate de que el PDF sea claro e inténtalo de nuevo.`);
+            const errorMessage = (err as Error).message;
+            if (errorMessage.toLowerCase().includes('api key')) {
+                 setError("Error de configuración: La clave de API de Gemini no está disponible. Contacta al administrador.");
+            } else {
+                 setError(`Error al procesar el documento: ${errorMessage}`);
+            }
         } finally {
             setLoading(false);
         }

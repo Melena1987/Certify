@@ -200,9 +200,6 @@ const DossierDetail: React.FC = () => {
         await updateSupports(optimisticSupports);
 
         try {
-            if (!process.env.API_KEY) {
-                throw new Error("Gemini API key is not configured.");
-            }
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             
             const response = await fetch(evidence.value);
