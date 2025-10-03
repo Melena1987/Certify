@@ -40,6 +40,23 @@ const AuthPage: React.FC = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isPolicyModalOpen, setIsPolicyModalOpen] = useState(false);
 
+  const handleFirebaseError = (err: any): string => {
+    switch (err.code) {
+      case 'auth/email-already-in-use':
+        return 'Este email ya está registrado. Por favor, inicia sesión o utiliza otro email.';
+      case 'auth/invalid-email':
+        return 'El formato del email no es válido. Por favor, comprueba que esté bien escrito.';
+      case 'auth/weak-password':
+        return 'La contraseña es demasiado débil. Debe tener al menos 6 caracteres.';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
+        return 'El email o la contraseña son incorrectos. Por favor, inténtalo de nuevo.';
+      default:
+        console.error("Firebase Auth Error:", err);
+        return 'Ha ocurrido un error inesperado. Por favor, inténtalo más tarde.';
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +83,7 @@ const AuthPage: React.FC = () => {
         });
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(handleFirebaseError(err));
     } finally {
       setLoading(false);
     }
