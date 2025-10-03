@@ -90,8 +90,6 @@ const CreateDossierModal: React.FC<{ isOpen: boolean; onClose: () => void; entit
 };
 
 const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; entityName: string; userId: string; }> = ({ isOpen, onClose, entityName, userId }) => {
-    const [eventName, setEventName] = useState('');
-    const [eventDate, setEventDate] = useState('');
     const [contractFile, setContractFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
@@ -103,8 +101,6 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
     };
 
     const resetForm = () => {
-        setEventName('');
-        setEventDate('');
         setContractFile(null);
         setError('');
         setLoading(false);
@@ -117,8 +113,8 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!eventName || !eventDate || !contractFile) {
-            setError('Todos los campos y el archivo del contrato son obligatorios.');
+        if (!contractFile) {
+            setError('Debes seleccionar un archivo de contrato.');
             return;
         }
         setLoading(true);
@@ -144,11 +140,18 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
             };
 
             const textPart = {
-                text: `Eres un asistente especializado en analizar contratos de patrocinio. A partir de la imagen del contrato adjunta, identifica todos los soportes publicitarios que la entidad patrocinada debe realizar.
-            
-                Extrae una lista de soportes que coincidan con los siguientes tipos válidos: ${SUPPORT_TYPES.join(', ')}.
-                
-                Devuelve tu respuesta EXCLUSIVAMENTE en formato JSON, con una única clave "soportes" que contenga un array de strings con los nombres de los soportes identificados. Si no se identifica ninguno, devuelve un array vacío.`
+                text: `Eres un asistente especializado en analizar contratos de patrocinio. A partir de la imagen del contrato adjunta, extrae la siguiente información:
+1. El nombre del evento.
+2. La fecha del evento, en formato YYYY-MM-DD.
+3. Una lista de todos los soportes publicitarios que la entidad patrocinada debe realizar. La lista de soportes válidos es: ${SUPPORT_TYPES.join(', ')}.
+
+Devuelve tu respuesta EXCLUSIVAMENTE en formato JSON. La estructura debe ser:
+{
+  "eventName": "Nombre del Evento Extraído",
+  "eventDate": "YYYY-MM-DD",
+  "soportes": ["Soporte 1", "Soporte 2", ...]
+}
+Si no encuentras algún dato, déjalo como un string vacío. Si no identificas soportes, devuelve un array vacío.`
             };
             
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -160,20 +163,27 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
                     responseSchema: {
                         type: Type.OBJECT,
                         properties: {
+                            eventName: { type: Type.STRING },
+                            eventDate: { type: Type.STRING },
                             soportes: {
                                 type: Type.ARRAY,
                                 items: {
                                     type: Type.STRING
                                 }
                             }
-                        }
+                        },
+                        required: ['eventName', 'eventDate', 'soportes']
                     }
                 }
             });
             
             const responseText = response.text;
             const result = JSON.parse(responseText);
-            const identifiedSupports: string[] = result.soportes;
+            const { eventName: extractedEventName, eventDate: extractedEventDate, soportes: identifiedSupports } = result;
+
+            if (!extractedEventName || !extractedEventDate) {
+                throw new Error("No se pudo extraer el nombre o la fecha del evento del contrato. Asegúrate de que la imagen sea clara y legible.");
+            }
 
             if (!identifiedSupports || identifiedSupports.length === 0) {
                 throw new Error("No se encontraron soportes publicitarios válidos en el contrato.");
@@ -190,8 +200,8 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
             await addDoc(collection(db, 'dossiers'), {
                 userId,
                 entityName,
-                eventName,
-                eventDate,
+                eventName: extractedEventName,
+                eventDate: extractedEventDate,
                 status: DossierStatus.DRAFT,
                 supports: newSupports,
                 createdAt: serverTimestamp()
@@ -219,7 +229,7 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
                     <Sparkles className="h-8 w-8 text-sky-600" />
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800">Crear Dossier con IA</h2>
-                        <p className="text-sm text-slate-500">Sube una imagen del contrato y la IA creará los soportes.</p>
+                        <p className="text-sm text-slate-500">Sube una imagen del contrato y la IA extraerá los detalles.</p>
                     </div>
                 </div>
                 <form onSubmit={handleSubmit}>
@@ -227,14 +237,6 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
                     <div className="mb-4">
                         <label className="block text-slate-600 text-sm font-medium mb-2">Nombre de la Entidad</label>
                         <input type="text" value={entityName} disabled className="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-md" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="eventNameAi" className="block text-slate-600 text-sm font-medium mb-2">Nombre del Evento</label>
-                        <input id="eventNameAi" type="text" value={eventName} onChange={e => setEventName(e.target.value)} required className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500" />
-                    </div>
-                    <div className="mb-4">
-                        <label htmlFor="eventDateAi" className="block text-slate-600 text-sm font-medium mb-2">Fecha del Evento</label>
-                        <input id="eventDateAi" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} required className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500" />
                     </div>
                     <div className="mb-6">
                         <label htmlFor="contractFile" className="block text-slate-600 text-sm font-medium mb-2">Archivo del Contrato (Imagen)</label>
