@@ -10,6 +10,7 @@ import Spinner from './Spinner';
 import { Plus, X, Calendar, FileText, ChevronsRight, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SUPPORT_TYPES } from '../constants';
+import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: string } = {
     [DossierStatus.DRAFT]: 'bg-yellow-100 text-yellow-800',
@@ -93,6 +94,7 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
     const [contractFile, setContractFile] = useState<File | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const { apiKey, apiKeyError } = useApiKey();
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -117,8 +119,8 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
             setError('Debes seleccionar un archivo de contrato.');
             return;
         }
-        if (!process.env.API_KEY) {
-            setError('La clave de API para la IA no está disponible. No se puede procesar el contrato.');
+        if (!apiKey) {
+            setError(apiKeyError || 'La clave de API para la IA no está disponible. No se puede procesar el contrato.');
             return;
         }
 
@@ -155,7 +157,7 @@ Devuelve tu respuesta EXCLUSIVAMENTE en formato JSON. La estructura debe ser:
 Si no encuentras algún dato, déjalo como un string vacío. Si no identificas soportes, devuelve un array vacío.`
             };
             
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
                 contents: { parts: [filePart, textPart] },
@@ -191,8 +193,8 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
             }
 
             const newSupports: Support[] = identifiedSupports
-                .filter(type => SUPPORT_TYPES.includes(type))
-                .map(type => ({
+                .filter((type: string) => SUPPORT_TYPES.includes(type))
+                .map((type: string) => ({
                     id: `${Date.now()}-${type.replace(/\s+/g, '-')}`,
                     type,
                     evidences: []
@@ -246,7 +248,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
                     </div>
                     <div className="flex justify-end space-x-3">
                         <button type="button" onClick={handleClose} className="py-2 px-4 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Cancelar</button>
-                        <button type="submit" disabled={loading || !process.env.API_KEY} className="py-2 px-4 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition flex items-center min-w-[150px] justify-center disabled:bg-slate-400 disabled:cursor-not-allowed">
+                        <button type="submit" disabled={loading || !apiKey} className="py-2 px-4 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition flex items-center min-w-[150px] justify-center disabled:bg-slate-400 disabled:cursor-not-allowed">
                             {loading ? <><Spinner className="h-5 w-5 mr-2" /> <span>Analizando...</span></> : <><Sparkles size={16} className="mr-2"/><span>Analizar y Crear</span></>}
                         </button>
                     </div>
@@ -314,6 +316,7 @@ const Dashboard: React.FC = () => {
   const [dossierToDelete, setDossierToDelete] = useState<Dossier | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const { apiKeyError } = useApiKey();
 
   useEffect(() => {
     if (!currentUser) return;
@@ -391,7 +394,10 @@ const Dashboard: React.FC = () => {
   return (
     <div>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-            <h1 className="text-3xl font-bold text-slate-800">Mis Dossiers</h1>
+            <div>
+                <h1 className="text-3xl font-bold text-slate-800">Mis Dossiers</h1>
+                {apiKeyError && <p className="mt-1 text-xs text-red-600 bg-red-50 p-2 rounded-md">{apiKeyError}</p>}
+            </div>
             <div className="flex flex-wrap gap-2">
                  <button onClick={() => setIsContractModalOpen(true)} className="flex items-center space-x-2 bg-white text-sky-600 border border-sky-600 py-2 px-4 rounded-lg shadow-sm hover:bg-sky-50 transition">
                     <Sparkles size={20} />
@@ -423,7 +429,7 @@ const Dashboard: React.FC = () => {
                             </div>
                             <div className="flex items-center space-x-2 text-slate-500 text-sm mt-4">
                                 <Calendar size={16} />
-                                <span>{new Date(dossier.eventDate).toLocaleDateString()}</span>
+                                <span>{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</span>
                             </div>
                         </div>
                          <div className="border-t mt-4 pt-4 flex justify-between items-center">

@@ -17,27 +17,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user: FirebaseUser | null) => {
-      if (user) {
-        const userRef = doc(db, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
+      try {
+        if (user) {
+          const userRef = doc(db, 'users', user.uid);
+          const userSnap = await getDoc(userRef);
 
-        if (userSnap.exists()) {
-          const userProfile = userSnap.data() as UserProfile;
-          setCurrentUser({
-            uid: user.uid,
-            email: user.email,
-            profile: userProfile,
-          });
+          if (userSnap.exists()) {
+            const userProfile = userSnap.data() as UserProfile;
+            setCurrentUser({
+              uid: user.uid,
+              email: user.email,
+              profile: userProfile,
+            });
+          } else {
+             setCurrentUser({
+              uid: user.uid,
+              email: user.email,
+            });
+          }
         } else {
-           setCurrentUser({
-            uid: user.uid,
-            email: user.email,
-          });
+          setCurrentUser(null);
         }
-      } else {
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+        // Set user to null to force logout and redirect to auth page on error.
         setCurrentUser(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
@@ -10,9 +8,9 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-// FIX: Import GoogleGenAI for Gemini API usage
 import { GoogleGenAI } from '@google/genai';
 import { ArrowLeft, Paperclip, Link as LinkIcon, Upload, X, Plus, Trash2, Sparkles, AlertTriangle, CheckCircle, Clock, FileText } from 'lucide-react';
+import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
     [DossierStatus.DRAFT]: { container: 'border-yellow-300 bg-yellow-50', text: 'text-yellow-700' },
@@ -55,6 +53,7 @@ const DossierDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
+    const { apiKey, apiKeyError } = useApiKey();
     const [dossier, setDossier] = useState<Dossier | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -208,7 +207,6 @@ const DossierDetail: React.FC = () => {
         updateSupports(newSupports);
     };
 
-    // FIX: Implement AI analysis for image evidence using Gemini API
     const handleAnalyzeEvidence = async (supportId: string, evidenceId: string) => {
         if (!dossier) return;
         
@@ -219,17 +217,15 @@ const DossierDetail: React.FC = () => {
 
         setAnalyzing(prev => ({ ...prev, [evidenceId]: true }));
 
-        // Optimistically update UI to 'pending'
         const optimisticSupports = dossier.supports.map(s => s.id === supportId ? {
-            // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
             ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'pending' as 'pending', result: '', timestamp: serverTimestamp() } } : ev)
         } : s);
         await updateSupports(optimisticSupports);
 
-        if (!process.env.API_KEY) {
+        if (!apiKey) {
             console.error("API Key not available for analysis.");
             const errorSupports = dossier.supports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: 'Análisis fallido: La clave de API no está configurada.', timestamp: serverTimestamp() } } : ev)
+                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: `Análisis fallido: ${apiKeyError || 'La clave de API no está configurada.'}`, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(errorSupports);
             setAnalyzing(prev => ({ ...prev, [evidenceId]: false }));
@@ -237,7 +233,7 @@ const DossierDetail: React.FC = () => {
         }
 
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+            const ai = new GoogleGenAI({ apiKey });
             
             const response = await fetch(evidence.value);
             const blob = await response.blob();
@@ -250,7 +246,7 @@ const DossierDetail: React.FC = () => {
             });
 
             const imagePart = { inlineData: { mimeType: blob.type, data: base64String } };
-            const textPart = { text: `Analyze this image to verify the presence of sponsorship materials for "Diputación de Alicante". Look for logos, banners, or other explicit mentions. Provide a brief, conclusive summary.` };
+            const textPart = { text: `Analiza esta imagen para verificar la presencia de material de patrocinio de la "Diputación de Málaga". Busca logotipos, pancartas u otras menciones explícitas. Proporciona un resumen breve y concluyente en español.` };
 
             const genAIResponse = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
@@ -264,7 +260,6 @@ const DossierDetail: React.FC = () => {
             const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
 
             const finalSupports = latestSupports.map(s => s.id === supportId ? {
-                // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
                 ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'completed' as 'completed', result: analysisResult, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(finalSupports);
@@ -279,7 +274,6 @@ const DossierDetail: React.FC = () => {
             const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
 
             const errorSupports = latestSupports.map(s => s.id === supportId ? {
-                // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
                 ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: userFriendlyError, timestamp: serverTimestamp() } } : ev)
             } : s);
             await updateSupports(errorSupports);
@@ -320,13 +314,15 @@ const DossierDetail: React.FC = () => {
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-800">{dossier.eventName}</h1>
-                        <p className="text-slate-500">{dossier.entityName} - {new Date(dossier.eventDate).toLocaleDateString()}</p>
+                        <p className="text-slate-500">{dossier.entityName} - {new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
                     </div>
                     <span className={`text-sm font-bold px-3 py-1 rounded-full ${statusStyles[dossier.status].text} ${statusStyles[dossier.status].container.replace('border-l-4', '')}`}>
                         {dossier.status}
                     </span>
                 </div>
             </div>
+            
+            {apiKeyError && <p className="mb-4 text-xs text-red-600 bg-red-50 p-2 rounded-md">{apiKeyError}</p>}
 
             <div className="space-y-6">
                 {dossier.supports.map(support => (
@@ -340,7 +336,7 @@ const DossierDetail: React.FC = () => {
                         isUploading={isUploading === support.id}
                         analyzing={analyzing}
                         isEditable={dossier.status === DossierStatus.DRAFT}
-                        apiKeyAvailable={!!process.env.API_KEY}
+                        apiKeyAvailable={!!apiKey}
                     />
                 ))}
             </div>
