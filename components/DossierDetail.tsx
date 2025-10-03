@@ -1,8 +1,4 @@
 
-
-
-
-
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -127,6 +123,17 @@ const DossierDetail: React.FC = () => {
 
     const handleAddEvidence = async (supportId: string, type: EvidenceType, value: string | File) => {
         if (!dossier) return;
+
+        // Check for duplicate URL before anything else
+        if (type === EvidenceType.URL) {
+            const url = value as string;
+            const targetSupport = dossier.supports.find(s => s.id === supportId);
+            if (targetSupport?.evidences.some(e => e.type === EvidenceType.URL && e.value === url)) {
+                alert('Esta URL ya ha sido añadida como evidencia.');
+                return; // Exit the function if a duplicate is found
+            }
+        }
+
         setIsUploading(supportId);
         
         let evidenceValue = '';
