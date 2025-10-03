@@ -8,7 +8,7 @@ const firebaseConfig = {
   apiKey: "AIzaSyDLB-Nse95J12bG88sUz-1FFYlh2N97sz4",
   authDomain: "certify-diputacion.firebaseapp.com",
   projectId: "certify-diputacion",
-  storageBucket: "certify-diputacion.appspot.com",
+  storageBucket: "certify-diputacion.firebasestorage.app",
   messagingSenderId: "52185000301",
   appId: "1:52185000301:web:e48e113f179adbecbb1264"
 };
