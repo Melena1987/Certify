@@ -73,7 +73,14 @@ const AuthPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4">
+    <div className="min-h-screen bg-slate-100 flex flex-col justify-center items-center p-4 relative">
+      <div className="absolute top-4 left-4 sm:top-6 sm:left-6 lg:top-8 lg:left-8">
+        <img
+          src="https://firebasestorage.googleapis.com/v0/b/certify-diputacion.firebasestorage.app/o/recursos%2Fmarca_mlg_compite_diputacion_monocromatico_azul.png?alt=media&token=f2295896-b2f4-44c2-a3f8-8f895e994eb8"
+          alt="Logo de la Diputación de Málaga"
+          className="h-12"
+        />
+      </div>
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
             <ShieldCheck className="h-12 w-12 text-sky-600 mx-auto" />
