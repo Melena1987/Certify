@@ -132,7 +132,7 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
                 reader.readAsDataURL(contractFile);
             });
 
-            const imagePart = {
+            const filePart = {
                 inlineData: {
                     mimeType: contractFile.type,
                     data: fileAsBase64,
@@ -140,7 +140,7 @@ const ContractUploadModal: React.FC<{ isOpen: boolean; onClose: () => void; enti
             };
 
             const textPart = {
-                text: `Eres un asistente especializado en analizar contratos de patrocinio. A partir de la imagen del contrato adjunta, extrae la siguiente información:
+                text: `Eres un asistente especializado en analizar contratos de patrocinio. A partir del documento PDF del contrato adjunto, extrae la siguiente información:
 1. El nombre del evento.
 2. La fecha del evento, en formato YYYY-MM-DD.
 3. Una lista de todos los soportes publicitarios que la entidad patrocinada debe realizar. La lista de soportes válidos es: ${SUPPORT_TYPES.join(', ')}.
@@ -157,7 +157,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
             const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-flash',
-                contents: { parts: [imagePart, textPart] },
+                contents: { parts: [filePart, textPart] },
                 config: {
                     responseMimeType: 'application/json',
                     responseSchema: {
@@ -182,7 +182,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
             const { eventName: extractedEventName, eventDate: extractedEventDate, soportes: identifiedSupports } = result;
 
             if (!extractedEventName || !extractedEventDate) {
-                throw new Error("No se pudo extraer el nombre o la fecha del evento del contrato. Asegúrate de que la imagen sea clara y legible.");
+                throw new Error("No se pudo extraer el nombre o la fecha del evento del contrato. Asegúrate de que el PDF sea claro y legible.");
             }
 
             if (!identifiedSupports || identifiedSupports.length === 0) {
@@ -211,7 +211,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
 
         } catch (err) {
             console.error("Error creating dossier with AI: ", err);
-            setError(`Error: ${(err as Error).message}. Asegúrate de que la imagen sea clara e inténtalo de nuevo.`);
+            setError(`Error: ${(err as Error).message}. Asegúrate de que el PDF sea claro e inténtalo de nuevo.`);
         } finally {
             setLoading(false);
         }
@@ -229,7 +229,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
                     <Sparkles className="h-8 w-8 text-sky-600" />
                     <div>
                         <h2 className="text-2xl font-bold text-slate-800">Crear Dossier con IA</h2>
-                        <p className="text-sm text-slate-500">Sube una imagen del contrato y la IA extraerá los detalles.</p>
+                        <p className="text-sm text-slate-500">Sube el contrato en formato PDF y la IA extraerá los detalles.</p>
                     </div>
                 </div>
                 <form onSubmit={handleSubmit}>
@@ -239,8 +239,8 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
                         <input type="text" value={entityName} disabled className="w-full px-4 py-2 bg-slate-100 border border-slate-300 rounded-md" />
                     </div>
                     <div className="mb-6">
-                        <label htmlFor="contractFile" className="block text-slate-600 text-sm font-medium mb-2">Archivo del Contrato (Imagen)</label>
-                        <input id="contractFile" type="file" accept="image/png, image/jpeg, image/webp" onChange={handleFileChange} required className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
+                        <label htmlFor="contractFile" className="block text-slate-600 text-sm font-medium mb-2">Archivo del Contrato (PDF)</label>
+                        <input id="contractFile" type="file" accept="application/pdf" onChange={handleFileChange} required className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
                     </div>
                     <div className="flex justify-end space-x-3">
                         <button type="button" onClick={handleClose} className="py-2 px-4 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Cancelar</button>
