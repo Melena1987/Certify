@@ -295,7 +295,7 @@ const Dashboard: React.FC = () => {
             <div className="flex flex-wrap gap-2">
                  <button onClick={() => setIsContractModalOpen(true)} className="flex items-center space-x-2 bg-white text-sky-600 border border-sky-600 py-2 px-4 rounded-lg shadow-sm hover:bg-sky-50 transition">
                     <Sparkles size={20} />
-                    <span>Crear con IA</span>
+                    <span>Subir contrato</span>
                 </button>
                 <button onClick={() => setIsModalOpen(true)} className="flex items-center space-x-2 bg-sky-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-sky-700 transition">
                     <Plus size={20} />
