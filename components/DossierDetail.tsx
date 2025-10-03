@@ -123,6 +123,7 @@ const DossierDetail: React.FC = () => {
 
     const handleAddEvidence = async (supportId: string, type: EvidenceType, value: string | File) => {
         if (!dossier) return;
+        const originalSupports = dossier.supports;
 
         // Check for duplicate URL before anything else
         if (type === EvidenceType.URL) {
@@ -136,38 +137,49 @@ const DossierDetail: React.FC = () => {
 
         setIsUploading(supportId);
         
-        let evidenceValue = '';
-        let fileName: string | undefined = undefined;
+        try {
+            let evidenceValue = '';
+            let fileName: string | undefined = undefined;
 
-        if (type === EvidenceType.URL) {
-            evidenceValue = value as string;
-        } else if (type === EvidenceType.IMAGE && value instanceof File) {
-            const file = value;
-            fileName = file.name;
-            const storageRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}_${file.name}`);
-            await uploadBytes(storageRef, file);
-            evidenceValue = await getDownloadURL(storageRef);
-        }
-
-        const newEvidence: Evidence = {
-            id: Date.now().toString(),
-            type,
-            value: evidenceValue,
-        };
-
-        if (fileName) {
-            newEvidence.fileName = fileName;
-        }
-
-        const newSupports = dossier.supports.map(s => {
-            if (s.id === supportId) {
-                return { ...s, evidences: [...s.evidences, newEvidence] };
+            if (type === EvidenceType.URL) {
+                evidenceValue = value as string;
+            } else if (type === EvidenceType.IMAGE && value instanceof File) {
+                const file = value;
+                fileName = file.name;
+                const storageRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}_${file.name}`);
+                await uploadBytes(storageRef, file);
+                evidenceValue = await getDownloadURL(storageRef);
             }
-            return s;
-        });
-        
-        await updateSupports(newSupports);
-        setIsUploading(null);
+
+            const newEvidence: Evidence = {
+                id: Date.now().toString(),
+                type,
+                value: evidenceValue,
+            };
+
+            if (fileName) {
+                newEvidence.fileName = fileName;
+            }
+
+            const newSupports = dossier.supports.map(s => {
+                if (s.id === supportId) {
+                    return { ...s, evidences: [...s.evidences, newEvidence] };
+                }
+                return s;
+            });
+            
+            // Optimistic UI update
+            setDossier(prev => prev ? { ...prev, supports: newSupports } : null);
+
+            await updateSupports(newSupports);
+        } catch (err) {
+            console.error("Error adding evidence:", err);
+            alert("Ocurrió un error al añadir la evidencia. Se restaurará el estado anterior.");
+            // Revert on failure
+            setDossier(prev => prev ? { ...prev, supports: originalSupports } : null);
+        } finally {
+            setIsUploading(null);
+        }
     };
 
     const handleRemoveEvidence = async (supportId: string, evidenceId: string) => {
