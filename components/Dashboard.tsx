@@ -1,15 +1,13 @@
-
-
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { db } from '../firebase';
+import React, { useState, useEffect } from 'react';
+import { collection, query, where, onSnapshot, addDoc, serverTimestamp, orderBy, doc, deleteDoc } from 'firebase/firestore';
+import { ref, deleteObject } from 'firebase/storage';
+import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import type { Dossier, Support } from '../types';
 import { DossierStatus } from '../types';
 import Spinner from './Spinner';
-import { Plus, X, Calendar, FileText, ChevronsRight, FileUp, Sparkles } from 'lucide-react';
+import { Plus, X, Calendar, FileText, ChevronsRight, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SUPPORT_TYPES } from '../constants';
 
@@ -258,6 +256,49 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
     );
 };
 
+const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; dossierName: string; isLoading: boolean; }> = ({ isOpen, onClose, onConfirm, dossierName, isLoading }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">
+                            Borrar Dossier
+                        </h3>
+                        <div className="mt-2">
+                            <p className="text-sm text-gray-500">
+                                ¿Estás seguro de que quieres borrar el dossier "<strong>{dossierName}</strong>"? Todas las evidencias asociadas serán eliminadas permanentemente. Esta acción no se puede deshacer.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+                    <button
+                        type="button"
+                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:w-auto sm:text-sm disabled:bg-red-400"
+                        onClick={onConfirm}
+                        disabled={isLoading}
+                    >
+                        {isLoading ? <Spinner className="h-5 w-5" /> : 'Borrar'}
+                    </button>
+                    <button
+                        type="button"
+                        className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 sm:mt-0 sm:w-auto sm:text-sm"
+                        onClick={onClose}
+                        disabled={isLoading}
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const Dashboard: React.FC = () => {
   const [dossiers, setDossiers] = useState<Dossier[]>([]);
@@ -265,6 +306,8 @@ const Dashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const { currentUser } = useAuth();
+  const [dossierToDelete, setDossierToDelete] = useState<Dossier | null>(null);
+  const [isDeleteLoading, setIsDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -287,6 +330,46 @@ const Dashboard: React.FC = () => {
 
     return () => unsubscribe();
   }, [currentUser]);
+
+  const handleDeleteDossier = async () => {
+    if (!dossierToDelete) return;
+
+    setIsDeleteLoading(true);
+    try {
+        // Delete associated files from storage
+        const evidenceFiles: string[] = [];
+        dossierToDelete.supports.forEach(support => {
+            support.evidences.forEach(evidence => {
+                if (evidence.type === 'image') {
+                    evidenceFiles.push(evidence.value);
+                }
+            });
+        });
+
+        for (const fileUrl of evidenceFiles) {
+            try {
+                const fileRef = ref(storage, fileUrl);
+                await deleteObject(fileRef);
+            } catch (error: any) {
+                // Ignore not-found errors, as the file might have already been deleted or the URL is invalid.
+                if (error.code !== 'storage/object-not-found') {
+                    console.error(`Failed to delete file ${fileUrl}:`, error);
+                }
+            }
+        }
+        
+        // Delete the dossier document from Firestore
+        const dossierRef = doc(db, 'dossiers', dossierToDelete.id);
+        await deleteDoc(dossierRef);
+
+    } catch (error) {
+        console.error("Error deleting dossier: ", error);
+        // Here you could set an error state to show a notification
+    } finally {
+        setIsDeleteLoading(false);
+        setDossierToDelete(null);
+    }
+  };
 
   if (loading) {
     return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
@@ -317,23 +400,33 @@ const Dashboard: React.FC = () => {
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {dossiers.map(dossier => (
-                    <Link to={`/dossier/${dossier.id}`} key={dossier.id} className="block bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
-                        <div className="flex justify-between items-start">
-                           <h2 className="text-xl font-bold text-slate-800 mb-2">{dossier.eventName}</h2>
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyles[dossier.status]}`}>
-                                {dossier.status}
-                            </span>
+                    <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                        <div>
+                            <div className="flex justify-between items-start">
+                               <h2 className="text-xl font-bold text-slate-800 mb-2 pr-4 break-words">{dossier.eventName}</h2>
+                                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyles[dossier.status]} whitespace-nowrap h-fit`}>
+                                    {dossier.status}
+                                </span>
+                            </div>
+                            <div className="flex items-center space-x-2 text-slate-500 text-sm mt-4">
+                                <Calendar size={16} />
+                                <span>{new Date(dossier.eventDate).toLocaleDateString()}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center space-x-2 text-slate-500 text-sm mt-4">
-                            <Calendar size={16} />
-                            <span>{new Date(dossier.eventDate).toLocaleDateString()}</span>
-                        </div>
-                         <div className="border-t my-4"></div>
-                         <div className="flex justify-end items-center text-sky-600 font-medium text-sm">
-                            <span>Ver detalles</span>
-                            <ChevronsRight size={18} className="ml-1"/>
+                         <div className="border-t mt-4 pt-4 flex justify-between items-center">
+                             <Link to={`/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
+                                <span>Ver detalles</span>
+                                <ChevronsRight size={18} className="ml-1"/>
+                             </Link>
+                             <button
+                                onClick={() => setDossierToDelete(dossier)}
+                                className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                aria-label={`Borrar dossier ${dossier.eventName}`}
+                            >
+                                <Trash2 size={18} />
+                            </button>
                          </div>
-                    </Link>
+                    </div>
                 ))}
             </div>
         )}
@@ -350,6 +443,14 @@ const Dashboard: React.FC = () => {
             onClose={() => setIsContractModalOpen(false)}
             entityName={currentUser?.profile?.entityName || ''}
             userId={currentUser?.uid || ''}
+        />
+
+        <DeleteConfirmationModal
+            isOpen={!!dossierToDelete}
+            onClose={() => setDossierToDelete(null)}
+            onConfirm={handleDeleteDossier}
+            dossierName={dossierToDelete?.eventName || ''}
+            isLoading={isDeleteLoading}
         />
     </div>
   );
