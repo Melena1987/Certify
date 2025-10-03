@@ -256,7 +256,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
     );
 };
 
-const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; dossierName: string; isLoading: boolean; }> = ({ isOpen, onClose, onConfirm, dossierName, isLoading }) => {
+const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; dossierName: string; isLoading: boolean; error: string; }> = ({ isOpen, onClose, onConfirm, dossierName, isLoading, error }) => {
     if (!isOpen) return null;
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
@@ -276,6 +276,11 @@ const DeleteConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; 
                         </div>
                     </div>
                 </div>
+                 {error && (
+                    <div className="mt-4 bg-red-100 p-3 rounded-lg text-sm text-red-800" role="alert">
+                        <p>{error}</p>
+                    </div>
+                )}
                 <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
                     <button
                         type="button"
@@ -308,6 +313,7 @@ const Dashboard: React.FC = () => {
   const { currentUser } = useAuth();
   const [dossierToDelete, setDossierToDelete] = useState<Dossier | null>(null);
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
 
   useEffect(() => {
     if (!currentUser) return;
@@ -330,11 +336,17 @@ const Dashboard: React.FC = () => {
 
     return () => unsubscribe();
   }, [currentUser]);
+  
+  const handleCloseDeleteModal = () => {
+    setDossierToDelete(null);
+    setDeleteError('');
+  };
 
   const handleDeleteDossier = async () => {
     if (!dossierToDelete) return;
 
     setIsDeleteLoading(true);
+    setDeleteError('');
     try {
         // Delete associated files from storage
         const evidenceFiles: string[] = [];
@@ -362,12 +374,13 @@ const Dashboard: React.FC = () => {
         const dossierRef = doc(db, 'dossiers', dossierToDelete.id);
         await deleteDoc(dossierRef);
 
+        handleCloseDeleteModal();
+
     } catch (error) {
         console.error("Error deleting dossier: ", error);
-        // Here you could set an error state to show a notification
+        setDeleteError('No se pudo borrar el dossier. Comprueba tu conexión e inténtalo de nuevo.');
     } finally {
         setIsDeleteLoading(false);
-        setDossierToDelete(null);
     }
   };
 
@@ -447,10 +460,11 @@ const Dashboard: React.FC = () => {
 
         <DeleteConfirmationModal
             isOpen={!!dossierToDelete}
-            onClose={() => setDossierToDelete(null)}
+            onClose={handleCloseDeleteModal}
             onConfirm={handleDeleteDossier}
             dossierName={dossierToDelete?.eventName || ''}
             isLoading={isDeleteLoading}
+            error={deleteError}
         />
     </div>
   );
