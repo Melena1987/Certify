@@ -1,6 +1,7 @@
 
 
 
+
 import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -8,7 +9,6 @@ import AuthPage from './components/AuthPage';
 import Dashboard from './components/Dashboard';
 import DossierDetail from './components/DossierDetail';
 import Header from './components/Header';
-import { useApiKey } from './context/ApiKeyContext';
 
 const CookieConsentBanner: React.FC = () => {
     const [showBanner, setShowBanner] = useState(false);
@@ -59,20 +59,6 @@ const CookieConsentBanner: React.FC = () => {
     );
 };
 
-const ApiKeyErrorBanner: React.FC = () => {
-    const { apiKeyError, isApiKeyLoading } = useApiKey();
-
-    if (isApiKeyLoading || !apiKeyError) {
-        return null;
-    }
-
-    return (
-        <div className="fixed top-16 left-0 right-0 bg-red-600 text-white p-3 z-40 text-center text-sm shadow-lg">
-            <p>{apiKeyError}</p>
-        </div>
-    );
-};
-
 
 const App: React.FC = () => {
   const { currentUser } = useAuth();
@@ -118,7 +104,6 @@ const App: React.FC = () => {
         } />
         <Route path="*" element={<Navigate to={currentUser ? "/" : "/auth"} />} />
       </Routes>
-      <ApiKeyErrorBanner />
       <CookieConsentBanner />
     </HashRouter>
   );
