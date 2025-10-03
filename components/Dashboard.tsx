@@ -212,10 +212,15 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
 
             handleClose();
 
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error creating dossier with AI: ", err);
-            const errorMessage = (err as Error).message;
-            setError(`Error al procesar el documento: ${errorMessage}`);
+            let userMessage = (err as Error).message;
+            if (userMessage.toLowerCase().includes('permission')) {
+                 userMessage = 'Permisos insuficientes. Esto puede ocurrir si tu cuenta es nueva. Por favor, intenta recargar la página o volver a iniciar sesión antes de reintentarlo.';
+            } else if (userMessage.toLowerCase().includes('json')) {
+                userMessage = 'La IA no pudo procesar el documento correctamente. Asegúrate de que el PDF sea claro y contenga la información requerida.';
+            }
+            setError(`Error al procesar el documento: ${userMessage}`);
         } finally {
             setLoading(false);
         }
