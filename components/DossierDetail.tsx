@@ -1,7 +1,8 @@
 
+
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -258,8 +259,9 @@ const DossierDetail: React.FC = () => {
             
             const analysisResult = genAIResponse.text;
             
-            const currentDoc = await onSnapshot(doc(db, 'dossiers', dossier.id), (d) => d.data());
-            const latestSupports = (currentDoc as Dossier)?.supports || dossier.supports;
+            const dossierRef = doc(db, 'dossiers', dossier.id);
+            const docSnap = await getDoc(dossierRef);
+            const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
 
             const finalSupports = latestSupports.map(s => s.id === supportId ? {
                 // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
@@ -272,8 +274,9 @@ const DossierDetail: React.FC = () => {
             const errorMessage = (err as Error).message;
             const userFriendlyError = `Análisis fallido: ${errorMessage}`;
             
-            const currentDoc = await onSnapshot(doc(db, 'dossiers', dossier.id), (d) => d.data());
-            const latestSupports = (currentDoc as Dossier)?.supports || dossier.supports;
+            const dossierRef = doc(db, 'dossiers', dossier.id);
+            const docSnap = await getDoc(dossierRef);
+            const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
 
             const errorSupports = latestSupports.map(s => s.id === supportId ? {
                 // FIX: Cast status to literal type to prevent type widening and satisfy the Evidence type.
