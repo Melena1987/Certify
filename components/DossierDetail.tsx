@@ -2,6 +2,7 @@
 
 
 
+
 import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -145,8 +146,11 @@ const DossierDetail: React.FC = () => {
             id: Date.now().toString(),
             type,
             value: evidenceValue,
-            fileName
         };
+
+        if (fileName) {
+            newEvidence.fileName = fileName;
+        }
 
         const newSupports = dossier.supports.map(s => {
             if (s.id === supportId) {
