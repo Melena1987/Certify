@@ -9,7 +9,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType, SupportStatus } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronRight, ChevronDown, CheckCircle, Flag, Info } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, FileText, ChevronRight, ChevronDown, CheckCircle, Flag } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -19,10 +19,10 @@ const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: 
     [DossierStatus.REJECTED]: { container: 'border-red-300 bg-red-50', text: 'text-red-700' },
 };
 
-const supportStatusStyles: { [key in SupportStatus]: { badge: string, icon: React.ElementType, title: string } } = {
-    [SupportStatus.PENDING]: { badge: 'bg-slate-100 text-slate-600', icon: Info, title: 'Pendiente' },
-    [SupportStatus.APPROVED]: { badge: 'bg-green-100 text-green-700', icon: CheckCircle, title: 'Aprobado' },
-    [SupportStatus.REJECTED]: { badge: 'bg-red-100 text-red-700', icon: AlertTriangle, title: 'Incidencia' },
+const supportStatusStyles: { [key in SupportStatus]: { badge: string } } = {
+    [SupportStatus.PENDING]: { badge: 'bg-slate-100 text-slate-600' },
+    [SupportStatus.APPROVED]: { badge: 'bg-green-100 text-green-700' },
+    [SupportStatus.REJECTED]: { badge: 'bg-red-100 text-red-700' },
 };
 
 const DossierDetail: React.FC = () => {
@@ -383,7 +383,6 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
     
     // Defensively get status styles, defaulting to PENDING if status is invalid
     const statusInfo = supportStatusStyles[support.status] || supportStatusStyles[SupportStatus.PENDING];
-    const StatusBadge = statusInfo.icon;
 
     const urlEvidences = support.evidences.filter(e => e.type === EvidenceType.URL);
     const imageEvidences = support.evidences.filter(e => e.type === EvidenceType.IMAGE);
@@ -393,7 +392,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
             <div className="p-4 border-b flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
                 <div className="flex items-center space-x-3">
                      <span className={`p-1.5 rounded-full ${statusInfo.badge}`}>
-                        <StatusBadge size={20} />
+                        {isCollapsed ? <ChevronRight size={20} /> : <ChevronDown size={20} />}
                     </span>
                     <div>
                         <h2 className="text-lg font-semibold text-slate-800">{support.type}</h2>
@@ -406,7 +405,6 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                     {isEditable && (
                         <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition p-1 rounded-full"><Trash2 size={18} /></button>
                     )}
-                    {isCollapsed ? <ChevronRight size={20} className="text-slate-500" /> : <ChevronDown size={20} className="text-slate-500" />}
                 </div>
             </div>
             
