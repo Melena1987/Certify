@@ -179,6 +179,10 @@ const AdminDashboard: React.FC = () => {
         d.eventName.toLowerCase().includes(searchTerm.toLowerCase()) || 
         d.entityName.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    
+    const dossiersToShow = filteredDossiers.filter(d => 
+        d.status === DossierStatus.SUBMITTED || d.status === DossierStatus.APPROVED
+    );
 
     return (
         <div>
@@ -230,11 +234,16 @@ const AdminDashboard: React.FC = () => {
                             <h3 className="mt-4 text-xl font-semibold text-slate-700">No se encontraron resultados</h3>
                             <p className="mt-1 text-slate-500">Prueba con otro término de búsqueda.</p>
                         </div>
+                    ) : dossiersToShow.length === 0 ? (
+                        <div className="text-center py-16 bg-white rounded-lg shadow">
+                            <FileText size={48} className="mx-auto text-slate-400" />
+                            <h3 className="mt-4 text-xl font-semibold text-slate-700">No hay dossiers activos</h3>
+                            <p className="mt-1 text-slate-500">No se encontraron dossiers pendientes o aprobados. Los rechazados se ven en la ficha de cada entidad.</p>
+                        </div>
                     ) : (
                         <>
                             <DossierList dossiers={filteredDossiers} status={DossierStatus.SUBMITTED} />
                             <DossierList dossiers={filteredDossiers} status={DossierStatus.APPROVED} />
-                            <DossierList dossiers={filteredDossiers} status={DossierStatus.REJECTED} />
                         </>
                     )}
                 </div>
