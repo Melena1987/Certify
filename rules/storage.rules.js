@@ -13,29 +13,29 @@ service firebase.storage {
 
     // --- Funciones de Ayuda ---
     function isAdmin() {
+      // Devuelve true si el rol del usuario actual es 'DIPUTACION'
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION';
     }
-    
-    function isDossierOwner(dossierId) {
-      return get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid;
-    }
 
-    function canWriteToDossier(dossierId) {
-      // Verifica que el dossier exista, que el usuario sea el propietario, y que el estado sea 'Borrador'.
-      return exists(/databases/$(database)/documents/dossiers/$(dossierId)) &&
-             get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
-             get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
+    function getDossierData(dossierId) {
+      // Obtiene la información del documento del dossier desde Firestore
+      return get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
     }
 
     // --- Reglas para los Archivos de Dossiers ---
     // Path: dossiers/{dossierId}/{supportId}/{fileName}
     match /dossiers/{dossierId}/{allPaths=**} {
       
-      // LEER (Ver/Descargar): Permitido al propietario del dossier o a un admin.
-      allow read: if request.auth != null && (isDossierOwner(dossierId) || isAdmin());
+      // LEER (Ver/Descargar): Permitido si el usuario es el propietario del dossier o un admin.
+      allow read: if request.auth != null && (getDossierData(dossierId).userId == request.auth.uid || isAdmin());
 
-      // ESCRIBIR (Subir/Borrar): Permitido solo si la función canWriteToDossier devuelve true.
-      allow write: if request.auth != null && canWriteToDossier(dossierId);
+      // ESCRIBIR (Subir/Actualizar/Borrar): Permitido únicamente si se cumplen TODAS estas condiciones:
+      // 1. El usuario está autenticado.
+      // 2. El 'userId' del dossier en Firestore coincide con el del usuario.
+      // 3. El 'status' del dossier en Firestore es 'Borrador'.
+      allow write: if request.auth != null &&
+                      getDossierData(dossierId).userId == request.auth.uid &&
+                      getDossierData(dossierId).status == 'Borrador';
     }
 
     // --- Reglas para Recursos Públicos (logo) ---
