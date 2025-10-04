@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, ChangeEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -8,8 +8,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { GoogleGenAI } from '@google/genai';
-import { ArrowLeft, Paperclip, Link as LinkIcon, Upload, X, Plus, Trash2, Sparkles, AlertTriangle, CheckCircle, Clock, FileText } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -19,41 +18,11 @@ const statusStyles: { [key in DossierStatus]: { container: string, text: string 
     [DossierStatus.REJECTED]: { container: 'border-red-300 bg-red-50', text: 'text-red-700' },
 };
 
-const EvidenceAnalysis: React.FC<{ analysis: Evidence['analysis'] }> = ({ analysis }) => {
-    if (!analysis) return null;
-
-    switch (analysis.status) {
-        case 'pending':
-            return <div className="flex items-center space-x-2 text-xs text-slate-500 mt-2"><Clock size={14} className="animate-spin" /><span>Analizando...</span></div>;
-        case 'completed':
-            return (
-                <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-md">
-                    <div className="flex items-center space-x-2 text-xs font-bold text-green-700 mb-1">
-                        <CheckCircle size={14} /><span>Análisis completado</span>
-                    </div>
-                    <p className="text-sm text-slate-700 whitespace-pre-wrap">{analysis.result}</p>
-                </div>
-            );
-        case 'failed':
-            return (
-                <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-md">
-                    <div className="flex items-center space-x-2 text-xs font-bold text-red-700 mb-1">
-                        <AlertTriangle size={14} /><span>Análisis fallido</span>
-                    </div>
-                    <p className="text-sm text-slate-700">{analysis.result}</p>
-                </div>
-            );
-        default:
-            return null;
-    }
-};
-
-
 const DossierDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
-    const { apiKey, apiKeyError } = useApiKey();
+    const { apiKeyError } = useApiKey();
     const [dossier, setDossier] = useState<Dossier | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -61,7 +30,6 @@ const DossierDetail: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isUploading, setIsUploading] = useState<string | null>(null);
     const [evidenceError, setEvidenceError] = useState<Record<string, string | null>>({});
-    const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
         if (!id) {
@@ -226,81 +194,6 @@ const DossierDetail: React.FC = () => {
         updateSupports(newSupports);
     };
 
-    const handleAnalyzeEvidence = async (supportId: string, evidenceId: string) => {
-        if (!dossier) return;
-        
-        const support = dossier.supports.find(s => s.id === supportId);
-        const evidence = support?.evidences.find(e => e.id === evidenceId);
-
-        if (!evidence || evidence.type !== EvidenceType.IMAGE) return;
-
-        setAnalyzing(prev => ({ ...prev, [evidenceId]: true }));
-
-        const optimisticSupports = dossier.supports.map(s => s.id === supportId ? {
-            ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'pending' as 'pending', result: '', timestamp: serverTimestamp() } } : ev)
-        } : s);
-        await updateSupports(optimisticSupports);
-
-        if (!apiKey) {
-            console.error("API Key not available for analysis.");
-            const errorSupports = dossier.supports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: `Análisis fallido: ${apiKeyError || 'La clave de API no está configurada.'}`, timestamp: serverTimestamp() } } : ev)
-            } : s);
-            await updateSupports(errorSupports);
-            setAnalyzing(prev => ({ ...prev, [evidenceId]: false }));
-            return;
-        }
-
-        try {
-            const ai = new GoogleGenAI({ apiKey });
-            
-            const response = await fetch(evidence.value);
-            const blob = await response.blob();
-
-            const base64String = await new Promise<string>((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-                reader.onerror = reject;
-                reader.readAsDataURL(blob);
-            });
-
-            const imagePart = { inlineData: { mimeType: blob.type, data: base64String } };
-            const textPart = { text: `Analiza esta imagen para verificar la presencia de material de patrocinio de la "Diputación de Málaga". Busca logotipos, pancartas u otras menciones explícitas. Proporciona un resumen breve y concluyente en español.` };
-
-            const genAIResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: { parts: [imagePart, textPart] },
-            });
-            
-            const analysisResult = genAIResponse.text;
-            
-            const dossierRef = doc(db, 'dossiers', dossier.id);
-            const docSnap = await getDoc(dossierRef);
-            const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
-
-            const finalSupports = latestSupports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'completed' as 'completed', result: analysisResult, timestamp: serverTimestamp() } } : ev)
-            } : s);
-            await updateSupports(finalSupports);
-
-        } catch (err) {
-            console.error("Error analyzing evidence:", err);
-            const errorMessage = (err as Error).message;
-            const userFriendlyError = `Análisis fallido: ${errorMessage}`;
-            
-            const dossierRef = doc(db, 'dossiers', dossier.id);
-            const docSnap = await getDoc(dossierRef);
-            const latestSupports = docSnap.exists() ? (docSnap.data() as Dossier).supports : dossier.supports;
-
-            const errorSupports = latestSupports.map(s => s.id === supportId ? {
-                ...s, evidences: s.evidences.map(ev => ev.id === evidenceId ? { ...ev, analysis: { status: 'failed' as 'failed', result: userFriendlyError, timestamp: serverTimestamp() } } : ev)
-            } : s);
-            await updateSupports(errorSupports);
-        } finally {
-            setAnalyzing(prev => ({ ...prev, [evidenceId]: false }));
-        }
-    };
-    
     const handleSubmitDossier = async () => {
         if (!dossier) return;
         setIsSubmitting(true);
@@ -351,11 +244,8 @@ const DossierDetail: React.FC = () => {
                         onAddEvidence={(type, value) => handleAddEvidence(support.id, type, value)}
                         onRemoveEvidence={(evidenceId) => handleRemoveEvidence(support.id, evidenceId)}
                         onRemoveSupport={() => handleRemoveSupport(support.id)}
-                        onAnalyzeEvidence={(evidenceId) => handleAnalyzeEvidence(support.id, evidenceId)}
                         isUploading={isUploading === support.id}
-                        analyzing={analyzing}
                         isEditable={dossier.status === DossierStatus.DRAFT}
-                        apiKeyAvailable={!!apiKey}
                         evidenceError={evidenceError[support.id] || null}
                     />
                 ))}
@@ -393,15 +283,12 @@ interface SupportCardProps {
     onAddEvidence: (type: EvidenceType, value: string | File) => void;
     onRemoveEvidence: (evidenceId: string) => void;
     onRemoveSupport: () => void;
-    onAnalyzeEvidence: (evidenceId: string) => void;
     isUploading: boolean;
-    analyzing: Record<string, boolean>;
     isEditable: boolean;
-    apiKeyAvailable: boolean;
     evidenceError: string | null;
 }
 
-const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, onAnalyzeEvidence, isUploading, analyzing, isEditable, apiKeyAvailable, evidenceError }) => {
+const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, isUploading, isEditable, evidenceError }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
     const [urlValue, setUrlValue] = useState('');
@@ -445,21 +332,7 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
                            {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
                         </div>
                         {evidence.type === EvidenceType.IMAGE && (
-                            <>
-                                <img src={evidence.value} alt={evidence.fileName} className="mt-3 rounded-md max-h-60 object-contain border" />
-                                <EvidenceAnalysis analysis={evidence.analysis} />
-                                {isEditable && !evidence.analysis && (
-                                    <button 
-                                        onClick={() => onAnalyzeEvidence(evidence.id)} 
-                                        disabled={analyzing[evidence.id] || !apiKeyAvailable}
-                                        className="mt-3 flex items-center space-x-2 text-sm bg-sky-100 text-sky-700 hover:bg-sky-200 font-semibold py-1 px-3 rounded-md transition disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
-                                        title={!apiKeyAvailable ? "La funcionalidad de IA no está disponible debido a un problema de configuración." : "Analizar con IA"}
-                                    >
-                                        {analyzing[evidence.id] ? <Spinner className="h-4 w-4" /> : <Sparkles size={16} />}
-                                        <span>Analizar con IA</span>
-                                    </button>
-                                )}
-                            </>
+                            <img src={evidence.value} alt={evidence.fileName} className="mt-3 rounded-md max-h-60 object-contain border" />
                         )}
                     </div>
                 ))}

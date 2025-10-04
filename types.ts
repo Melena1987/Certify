@@ -31,12 +31,6 @@ export interface Evidence {
   type: EvidenceType;
   value: string; // URL string or image download URL
   fileName?: string; // Optional: for displaying image file names
-  // FIX: Added analysis field for AI feature
-  analysis?: {
-    status: 'pending' | 'completed' | 'failed';
-    result: string;
-    timestamp: any; // Firestore Timestamp
-  };
 }
 
 export interface Support {
