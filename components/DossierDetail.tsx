@@ -146,10 +146,21 @@ const DossierDetail: React.FC = () => {
             if (type === EvidenceType.URL) {
                 evidenceValue = value as string;
             } else if (type === EvidenceType.IMAGE && value instanceof File) {
+                if (!currentUser) {
+                    throw new Error("Usuario no autenticado para subir archivos.");
+                }
                 const file = value;
                 fileName = file.name;
+
+                const metadata = {
+                    customMetadata: {
+                        'ownerId': currentUser.uid,
+                        'dossierStatus': dossier.status
+                    }
+                };
+
                 const storageRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}_${file.name}`);
-                await uploadBytes(storageRef, file);
+                await uploadBytes(storageRef, file, metadata);
                 evidenceValue = await getDownloadURL(storageRef);
             }
 
