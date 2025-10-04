@@ -240,6 +240,8 @@ const DossierDetail: React.FC = () => {
     if (error) return <div className="text-center py-10 text-red-600 bg-red-50 rounded-lg">{error}</div>;
     if (!dossier) return null;
 
+    // Defensively get status styles, defaulting to DRAFT if status is invalid
+    const statusStyle = dossierStatusStyles[dossier.status] || dossierStatusStyles[DossierStatus.DRAFT];
     const availableSupportTypes = SUPPORT_TYPES.filter(type => !dossier.supports.some(s => s.type === type));
     const backLink = userRole === 'DIPUTACION' ? '/admin' : '/';
 
@@ -250,13 +252,13 @@ const DossierDetail: React.FC = () => {
                 <span>Volver al Panel</span>
             </RouterLink>
 
-            <div className={`p-6 border-l-4 rounded-lg mb-8 ${dossierStatusStyles[dossier.status].container}`}>
+            <div className={`p-6 border-l-4 rounded-lg mb-8 ${statusStyle.container}`}>
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-800">{dossier.eventName}</h1>
                         <p className="text-slate-500">{dossier.entityName} - {new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
                     </div>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${dossierStatusStyles[dossier.status].text} ${dossierStatusStyles[dossier.status].container.replace('border-l-4', '')}`}>
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${statusStyle.text} ${statusStyle.container.replace('border-l-4', '')}`}>
                         {dossier.status}
                     </span>
                 </div>
@@ -356,13 +358,15 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
         }
     };
     
-    const StatusBadge = supportStatusStyles[support.status].icon;
+    // Defensively get status styles, defaulting to PENDING if status is invalid
+    const statusInfo = supportStatusStyles[support.status] || supportStatusStyles[SupportStatus.PENDING];
+    const StatusBadge = statusInfo.icon;
 
     return (
          <div className="bg-white rounded-lg shadow-sm transition-shadow duration-300 hover:shadow-md">
             <div className="p-4 border-b flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
                 <div className="flex items-center space-x-3">
-                     <span className={`p-1.5 rounded-full ${supportStatusStyles[support.status].badge}`}>
+                     <span className={`p-1.5 rounded-full ${statusInfo.badge}`}>
                         <StatusBadge size={20} />
                     </span>
                     <div>
