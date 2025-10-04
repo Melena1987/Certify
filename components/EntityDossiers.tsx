@@ -5,7 +5,7 @@ import { db } from '../firebase';
 import type { Dossier, UserProfile } from '../types';
 import { DossierStatus } from '../types';
 import Spinner from './Spinner';
-import { ArrowLeft, FileText, ChevronsRight, FolderCheck, FolderClock, FolderX } from 'lucide-react';
+import { ArrowLeft, FileText, ChevronsRight, FolderCheck, FolderClock, FolderX, ChevronDown, ChevronRight } from 'lucide-react';
 
 const statusConfig: { [key in DossierStatus]?: { title: string, icon: React.ElementType, iconClass: string } } = {
     [DossierStatus.SUBMITTED]: {
@@ -31,6 +31,7 @@ const statusConfig: { [key in DossierStatus]?: { title: string, icon: React.Elem
 };
 
 const DossierStatusList: React.FC<{dossiers: Dossier[], status: DossierStatus}> = ({dossiers, status}) => {
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const config = statusConfig[status];
     if (!config) return null;
 
@@ -39,26 +40,35 @@ const DossierStatusList: React.FC<{dossiers: Dossier[], status: DossierStatus}> 
 
     return (
         <div className="mb-8">
-            <div className="flex items-center space-x-3 mb-4">
-                <config.icon size={24} className={config.iconClass} />
-                <h2 className="text-xl font-semibold text-slate-700">{config.title} ({filteredDossiers.length})</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredDossiers.map(dossier => (
-                     <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-800">{dossier.eventName}</h3>
-                            <p className="text-xs text-slate-400 mt-2">{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
+            <button 
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="w-full flex justify-between items-center text-left p-2 rounded-md hover:bg-slate-50 transition"
+                aria-expanded={!isCollapsed}
+            >
+                <div className="flex items-center space-x-3">
+                    <config.icon size={24} className={config.iconClass} />
+                    <h2 className="text-xl font-semibold text-slate-700">{config.title} ({filteredDossiers.length})</h2>
+                </div>
+                 {isCollapsed ? <ChevronRight size={24} className="text-slate-500" /> : <ChevronDown size={24} className="text-slate-500" />}
+            </button>
+            {!isCollapsed && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+                    {filteredDossiers.map(dossier => (
+                        <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">{dossier.eventName}</h3>
+                                <p className="text-xs text-slate-400 mt-2">{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
+                            </div>
+                            <div className="border-t mt-4 pt-4">
+                                <Link to={`/admin/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
+                                    <span>Ver Dossier</span>
+                                    <ChevronsRight size={18} className="ml-1"/>
+                                </Link>
+                            </div>
                         </div>
-                        <div className="border-t mt-4 pt-4">
-                            <Link to={`/admin/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
-                                <span>Ver Dossier</span>
-                                <ChevronsRight size={18} className="ml-1"/>
-                            </Link>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

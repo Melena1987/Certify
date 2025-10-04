@@ -5,7 +5,7 @@ import type { Dossier, UserProfile } from '../types';
 import { DossierStatus } from '../types';
 import Spinner from './Spinner';
 import { Link } from 'react-router-dom';
-import { Building, ChevronsRight, FileText, FolderCheck, FolderClock, FolderX, Search } from 'lucide-react';
+import { Building, ChevronsRight, FileText, FolderCheck, FolderClock, FolderX, Search, ChevronDown, ChevronRight } from 'lucide-react';
 
 const statusConfig = {
     [DossierStatus.SUBMITTED]: {
@@ -26,6 +26,7 @@ const statusConfig = {
 };
 
 const DossierList: React.FC<{ dossiers: Dossier[], status: DossierStatus }> = ({ dossiers, status }) => {
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const filteredDossiers = dossiers.filter(d => d.status === status);
     const config = statusConfig[status];
 
@@ -35,27 +36,36 @@ const DossierList: React.FC<{ dossiers: Dossier[], status: DossierStatus }> = ({
 
     return (
         <div>
-            <div className="flex items-center space-x-3 mb-4">
-                <config.icon size={24} className={config.iconClass} />
-                <h2 className="text-xl font-semibold text-slate-700">{config.title} ({filteredDossiers.length})</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredDossiers.map(dossier => (
-                    <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-                        <div>
-                            <h3 className="text-lg font-bold text-slate-800">{dossier.eventName}</h3>
-                            <p className="text-sm text-slate-500 mt-1">{dossier.entityName}</p>
-                            <p className="text-xs text-slate-400 mt-2">{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
+             <button
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="w-full flex justify-between items-center text-left p-2 rounded-md hover:bg-slate-50 transition"
+                aria-expanded={!isCollapsed}
+            >
+                <div className="flex items-center space-x-3">
+                    <config.icon size={24} className={config.iconClass} />
+                    <h2 className="text-xl font-semibold text-slate-700">{config.title} ({filteredDossiers.length})</h2>
+                </div>
+                {isCollapsed ? <ChevronRight size={24} className="text-slate-500" /> : <ChevronDown size={24} className="text-slate-500" />}
+            </button>
+            {!isCollapsed && (
+                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-4">
+                    {filteredDossiers.map(dossier => (
+                        <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-800">{dossier.eventName}</h3>
+                                <p className="text-sm text-slate-500 mt-1">{dossier.entityName}</p>
+                                <p className="text-xs text-slate-400 mt-2">{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
+                            </div>
+                            <div className="border-t mt-4 pt-4">
+                                <Link to={`/admin/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
+                                    <span>Revisar Dossier</span>
+                                    <ChevronsRight size={18} className="ml-1"/>
+                                </Link>
+                            </div>
                         </div>
-                        <div className="border-t mt-4 pt-4">
-                            <Link to={`/admin/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
-                                <span>Revisar Dossier</span>
-                                <ChevronsRight size={18} className="ml-1"/>
-                            </Link>
-                        </div>
-                    </div>
-                ))}
-            </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
@@ -63,6 +73,7 @@ const DossierList: React.FC<{ dossiers: Dossier[], status: DossierStatus }> = ({
 const EntityList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     const [entities, setEntities] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
+    const [isCollapsed, setIsCollapsed] = useState(false);
 
     useEffect(() => {
         const fetchEntities = async () => {
@@ -92,37 +103,46 @@ const EntityList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
 
     return (
          <div className="bg-white rounded-lg shadow">
-            <div className="p-6 border-b">
+            <button 
+                onClick={() => setIsCollapsed(!isCollapsed)} 
+                className="w-full p-6 border-b flex justify-between items-center text-left hover:bg-slate-50 transition rounded-t-lg"
+                aria-expanded={!isCollapsed}
+            >
               <h2 className="text-xl font-semibold text-slate-700">Entidades Registradas ({filteredEntities.length})</h2>
-            </div>
-            {entities.length === 0 ? (
-                 <div className="text-center py-10 px-6">
-                    <Building size={48} className="mx-auto text-slate-400" />
-                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
-                    <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
-                </div>
-            ) : filteredEntities.length === 0 ? (
-                <div className="text-center py-10 px-6">
-                    <Building size={48} className="mx-auto text-slate-400" />
-                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No se encontraron entidades</h3>
-                    <p className="mt-1 text-slate-500 text-sm">Prueba con otro término de búsqueda.</p>
-                </div>
-            ) : (
-                <ul className="divide-y divide-slate-200">
-                    {filteredEntities.map(entity => (
-                        <li key={entity.uid}>
-                            <Link to={`/admin/entity/${entity.uid}`} className="block hover:bg-slate-50 transition-colors duration-200">
-                                <div className="py-4 px-6 flex items-center justify-between">
-                                    <div>
-                                        <p className="font-medium text-slate-800">{entity.entityName}</p>
-                                        <p className="text-sm text-slate-500">{entity.email}</p>
-                                    </div>
-                                    <ChevronsRight className="h-5 w-5 text-slate-400" />
-                                </div>
-                            </Link>
-                        </li>
-                    ))}
-                </ul>
+               {isCollapsed ? <ChevronRight size={24} className="text-slate-500" /> : <ChevronDown size={24} className="text-slate-500" />}
+            </button>
+            {!isCollapsed && (
+                <>
+                    {entities.length === 0 ? (
+                        <div className="text-center py-10 px-6">
+                            <Building size={48} className="mx-auto text-slate-400" />
+                            <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
+                            <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
+                        </div>
+                    ) : filteredEntities.length === 0 ? (
+                        <div className="text-center py-10 px-6">
+                            <Building size={48} className="mx-auto text-slate-400" />
+                            <h3 className="mt-4 text-lg font-semibold text-slate-600">No se encontraron entidades</h3>
+                            <p className="mt-1 text-slate-500 text-sm">Prueba con otro término de búsqueda.</p>
+                        </div>
+                    ) : (
+                        <ul className="divide-y divide-slate-200">
+                            {filteredEntities.map(entity => (
+                                <li key={entity.uid}>
+                                    <Link to={`/admin/entity/${entity.uid}`} className="block hover:bg-slate-50 transition-colors duration-200">
+                                        <div className="py-4 px-6 flex items-center justify-between">
+                                            <div>
+                                                <p className="font-medium text-slate-800">{entity.entityName}</p>
+                                                <p className="text-sm text-slate-500">{entity.email}</p>
+                                            </div>
+                                            <ChevronsRight className="h-5 w-5 text-slate-400" />
+                                        </div>
+                                    </Link>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </>
             )}
         </div>
     )
