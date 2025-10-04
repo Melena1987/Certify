@@ -138,14 +138,22 @@ const DossierDetail: React.FC = () => {
                 setSupportError('La URL no puede estar vacía.');
                 return;
             }
-            if (!/^(https?:\/\/)/.test(value)) {
+            const trimmedValue = value.trim();
+            if (!/^(https?:\/\/)/.test(trimmedValue)) {
                 setSupportError('Introduce una URL válida (ej: http://...)');
                 return;
             }
+            
+            const currentSupport = dossier.supports[supportIndex];
+            if (currentSupport.evidences.some(e => e.type === EvidenceType.URL && e.value === trimmedValue)) {
+                setSupportError('Esta URL ya ha sido añadida.');
+                return;
+            }
+
             newEvidence = {
                 id: Date.now().toString(),
                 type: EvidenceType.URL,
-                value: value,
+                value: trimmedValue,
             };
         } else if (type === EvidenceType.IMAGE && value instanceof File) {
             setIsUploading(supportId);
