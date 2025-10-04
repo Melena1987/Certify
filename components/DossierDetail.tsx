@@ -8,7 +8,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronUp, ChevronDown } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const statusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -296,6 +296,7 @@ interface SupportCardProps {
 }
 
 const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, isUploading, isEditable, evidenceError, onViewImage }) => {
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const [showAddForm, setShowAddForm] = useState(false);
     const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
     const [urlValue, setUrlValue] = useState('');
@@ -314,101 +315,115 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
     };
 
     return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-            <div className="p-5 border-b flex justify-between items-center bg-slate-50">
-                <h3 className="text-lg font-semibold text-slate-800">{support.type}</h3>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300">
+            <div className="p-5 border-b flex justify-between items-center bg-slate-50 cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <div className="flex items-center gap-3">
+                    <button 
+                        className="text-slate-500 hover:text-sky-600"
+                        aria-expanded={!isCollapsed}
+                        aria-controls={`support-content-${support.id}`}
+                    >
+                        {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
+                    </button>
+                    <h3 className="text-lg font-semibold text-slate-800 select-none">{support.type}</h3>
+                </div>
                 {isEditable && (
-                     <button onClick={onRemoveSupport} className="text-slate-400 hover:text-red-600 transition">
+                     <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition z-10">
                         <Trash2 size={18} />
                     </button>
                 )}
             </div>
-            <div className="p-5">
-                {support.evidences.length === 0 && !showAddForm && (
-                     <div className="text-center py-4 text-slate-500">
-                        <FileText size={32} className="mx-auto text-slate-300" />
-                        <p className="mt-2 text-sm">No hay evidencias para este soporte.</p>
-                     </div>
-                )}
-                
-                {urlEvidences.length > 0 && (
-                    <div className="space-y-3">
-                        {urlEvidences.map(evidence => (
-                            <div key={evidence.id} className="p-3 bg-slate-50 rounded-md border flex justify-between items-center">
-                                <div className="flex items-center space-x-3 break-all">
-                                    <LinkIcon size={18} className="text-sky-600 flex-shrink-0" />
-                                    <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-700 hover:underline">
-                                        {evidence.value}
-                                    </a>
-                                </div>
-                                {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {imageEvidences.length > 0 && (
-                    <div className={urlEvidences.length > 0 ? 'mt-4' : ''}>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                             {imageEvidences.map(evidence => (
-                                <div key={evidence.id} className="group relative">
-                                    <button 
-                                        onClick={() => onViewImage(evidence.value)} 
-                                        className="w-full h-24 block rounded-md overflow-hidden border focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
-                                        aria-label={`Ver imagen ${evidence.fileName}`}
-                                    >
-                                        <img src={evidence.value} alt={evidence.fileName} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                                    </button>
-                                    <p className="text-xs text-slate-500 mt-1 truncate" title={evidence.fileName}>{evidence.fileName}</p>
-                                    {isEditable && (
-                                        <button 
-                                            onClick={() => onRemoveEvidence(evidence.id)} 
-                                            className="absolute top-1 right-1 bg-white/70 p-1 rounded-full text-slate-500 hover:text-red-500 hover:bg-white transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                            aria-label={`Eliminar imagen ${evidence.fileName}`}
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    )}
+            <div 
+              id={`support-content-${support.id}`}
+              className={`transition-all duration-500 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0' : 'max-h-[1500px]'}`}
+            >
+                <div className="p-5">
+                    {support.evidences.length === 0 && !showAddForm && (
+                         <div className="text-center py-4 text-slate-500">
+                            <FileText size={32} className="mx-auto text-slate-300" />
+                            <p className="mt-2 text-sm">No hay evidencias para este soporte.</p>
+                         </div>
+                    )}
+                    
+                    {urlEvidences.length > 0 && (
+                        <div className="space-y-3">
+                            {urlEvidences.map(evidence => (
+                                <div key={evidence.id} className="p-3 bg-slate-50 rounded-md border flex justify-between items-center">
+                                    <div className="flex items-center space-x-3 break-all">
+                                        <LinkIcon size={18} className="text-sky-600 flex-shrink-0" />
+                                        <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-700 hover:underline">
+                                            {evidence.value}
+                                        </a>
+                                    </div>
+                                    {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
                                 </div>
                             ))}
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {isEditable && (
-                    <div className={support.evidences.length > 0 || evidenceError ? 'mt-6' : ''}>
-                        {evidenceError && (
-                            <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
-                                <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-                                <span>{evidenceError}</span>
+                    {imageEvidences.length > 0 && (
+                        <div className={urlEvidences.length > 0 ? 'mt-4' : ''}>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                 {imageEvidences.map(evidence => (
+                                    <div key={evidence.id} className="group relative">
+                                        <button 
+                                            onClick={() => onViewImage(evidence.value)} 
+                                            className="w-full h-24 block rounded-md overflow-hidden border focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                                            aria-label={`Ver imagen ${evidence.fileName}`}
+                                        >
+                                            <img src={evidence.value} alt={evidence.fileName} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                        </button>
+                                        <p className="text-xs text-slate-500 mt-1 truncate" title={evidence.fileName}>{evidence.fileName}</p>
+                                        {isEditable && (
+                                            <button 
+                                                onClick={() => onRemoveEvidence(evidence.id)} 
+                                                className="absolute top-1 right-1 bg-white/70 p-1 rounded-full text-slate-500 hover:text-red-500 hover:bg-white transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                                aria-label={`Eliminar imagen ${evidence.fileName}`}
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
                             </div>
-                        )}
-                        {showAddForm ? (
-                            <div className="pt-4 border-t">
-                                <div className="flex space-x-2 mb-3">
-                                    <button onClick={() => setEvidenceType(EvidenceType.URL)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.URL ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Enlace</button>
-                                    <button onClick={() => setEvidenceType(EvidenceType.IMAGE)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.IMAGE ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Imagen</button>
+                        </div>
+                    )}
+
+                    {isEditable && (
+                        <div className={support.evidences.length > 0 || evidenceError ? 'mt-6' : ''}>
+                            {evidenceError && (
+                                <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
+                                    <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+                                    <span>{evidenceError}</span>
                                 </div>
-                                {evidenceType === EvidenceType.URL ? (
-                                    <input type="url" value={urlValue} onChange={e => setUrlValue(e.target.value)} placeholder="https://ejemplo.com" className="w-full px-3 py-2 border rounded-md" />
-                                ) : (
-                                    <input type="file" accept="image/*" onChange={(e: ChangeEvent<HTMLInputElement>) => setFileValue(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
-                                )}
-                                <div className="flex justify-end space-x-2 mt-3">
-                                    <button onClick={() => setShowAddForm(false)} className="px-3 py-1.5 text-sm bg-slate-100 rounded-md">Cancelar</button>
-                                    <button onClick={handleAddClick} disabled={isUploading} className="px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md flex items-center min-w-[70px] justify-center">
-                                        {isUploading ? <Spinner className="h-4 w-4" /> : 'Añadir'}
-                                    </button>
+                            )}
+                            {showAddForm ? (
+                                <div className="pt-4 border-t">
+                                    <div className="flex space-x-2 mb-3">
+                                        <button onClick={() => setEvidenceType(EvidenceType.URL)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.URL ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Enlace</button>
+                                        <button onClick={() => setEvidenceType(EvidenceType.IMAGE)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.IMAGE ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Imagen</button>
+                                    </div>
+                                    {evidenceType === EvidenceType.URL ? (
+                                        <input type="url" value={urlValue} onChange={e => setUrlValue(e.target.value)} placeholder="https://ejemplo.com" className="w-full px-3 py-2 border rounded-md" />
+                                    ) : (
+                                        <input type="file" accept="image/*" onChange={(e: ChangeEvent<HTMLInputElement>) => setFileValue(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
+                                    )}
+                                    <div className="flex justify-end space-x-2 mt-3">
+                                        <button onClick={() => setShowAddForm(false)} className="px-3 py-1.5 text-sm bg-slate-100 rounded-md">Cancelar</button>
+                                        <button onClick={handleAddClick} disabled={isUploading} className="px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md flex items-center min-w-[70px] justify-center">
+                                            {isUploading ? <Spinner className="h-4 w-4" /> : 'Añadir'}
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                             <button onClick={() => setShowAddForm(true)} className="w-full flex justify-center items-center space-x-2 py-2 border-2 border-dashed rounded-lg text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
-                                <Plus size={18} />
-                                <span>Añadir Evidencia</span>
-                            </button>
-                        )}
-                    </div>
-                )}
+                            ) : (
+                                 <button onClick={() => setShowAddForm(true)} className="w-full flex justify-center items-center space-x-2 py-2 border-2 border-dashed rounded-lg text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
+                                    <Plus size={18} />
+                                    <span>Añadir Evidencia</span>
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
