@@ -22,8 +22,47 @@ const statusStyles: { [key in DossierStatus]: string } = {
 const CreateDossierModal: React.FC<{ isOpen: boolean; onClose: () => void; entityName: string; userId: string;}> = ({ isOpen, onClose, entityName, userId }) => {
     const [eventName, setEventName] = useState('');
     const [eventDate, setEventDate] = useState('');
+    const [supports, setSupports] = useState<Support[]>([]);
+    const [customSupport, setCustomSupport] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+
+    const resetForm = () => {
+        setEventName('');
+        setEventDate('');
+        setSupports([]);
+        setCustomSupport('');
+        setLoading(false);
+        setError('');
+    };
+
+    const handleClose = () => {
+        resetForm();
+        onClose();
+    };
+
+    const handleAddSupportToList = (type: string) => {
+        const trimmedType = type.trim();
+        if (trimmedType && !supports.some(s => s.type.toLowerCase() === trimmedType.toLowerCase())) {
+            const newSupportItem: Support = {
+                id: `${Date.now()}-${trimmedType}`,
+                type: trimmedType,
+                evidences: [],
+                status: SupportStatus.PENDING
+            };
+            setSupports(prev => [...prev, newSupportItem]);
+        }
+    };
+    
+    const handleRemoveSupportFromList = (supportId: string) => {
+        setSupports(prev => prev.filter(s => s.id !== supportId));
+    };
+
+    const handleAddCustomSupportSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        handleAddSupportToList(customSupport);
+        setCustomSupport('');
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -40,12 +79,10 @@ const CreateDossierModal: React.FC<{ isOpen: boolean; onClose: () => void; entit
                 eventName,
                 eventDate,
                 status: DossierStatus.DRAFT,
-                supports: [],
+                supports,
                 createdAt: serverTimestamp()
             });
-            onClose();
-            setEventName('');
-            setEventDate('');
+            handleClose();
         } catch (err) {
             console.error("Error creating dossier: ", err);
             setError('No se pudo crear el dossier. Inténtalo de nuevo.');
@@ -53,13 +90,15 @@ const CreateDossierModal: React.FC<{ isOpen: boolean; onClose: () => void; entit
             setLoading(false);
         }
     }
-
+    
     if (!isOpen) return null;
+
+    const availableModalSupports = SUPPORT_TYPES.filter(t => !supports.some(s => s.type === t));
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 p-4">
             <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6 relative">
-                <button onClick={onClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <button onClick={handleClose} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
                     <X size={24} />
                 </button>
                 <h2 className="text-2xl font-bold text-slate-800 mb-4">Crear Nuevo Dossier</h2>
@@ -77,8 +116,55 @@ const CreateDossierModal: React.FC<{ isOpen: boolean; onClose: () => void; entit
                         <label htmlFor="eventDate" className="block text-slate-600 text-sm font-medium mb-2">Fecha del Evento</label>
                         <input id="eventDate" type="date" value={eventDate} onChange={e => setEventDate(e.target.value)} required className="w-full px-4 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-sky-500" />
                     </div>
-                    <div className="flex justify-end space-x-3">
-                        <button type="button" onClick={onClose} className="py-2 px-4 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Cancelar</button>
+
+                    <div className="border-t pt-4 space-y-4">
+                        <h3 className="text-lg font-medium text-slate-800">Añadir Soportes <span className="text-sm font-normal text-slate-500">(Opcional)</span></h3>
+                        
+                        {supports.length > 0 && (
+                            <div>
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Soportes añadidos</h4>
+                                <ul className="space-y-2">
+                                    {supports.map(s => (
+                                        <li key={s.id} className="flex items-center justify-between bg-slate-100 text-slate-800 text-sm px-3 py-2 rounded-md animate-fade-in-up">
+                                            <span>{s.type}</span>
+                                            <button type="button" onClick={() => handleRemoveSupportFromList(s.id)} className="text-slate-400 hover:text-red-600 p-1 rounded-full"><Trash2 size={16} /></button>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        <div>
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Soporte Personalizado</h4>
+                            <form onSubmit={handleAddCustomSupportSubmit} className="flex items-center gap-2">
+                                <input 
+                                    type="text" 
+                                    value={customSupport} 
+                                    onChange={e => setCustomSupport(e.target.value)} 
+                                    placeholder="Ej: Mención en entrevista"
+                                    className="flex-grow w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-sky-500"
+                                />
+                                <button type="submit" className="bg-slate-600 hover:bg-slate-700 text-white font-semibold text-sm px-4 py-1.5 rounded-md transition whitespace-nowrap flex items-center gap-2"><Plus size={16} /><span>Añadir</span></button>
+                            </form>
+                        </div>
+
+                        {availableModalSupports.length > 0 && (
+                             <div>
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Sugerencias</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableModalSupports.map(type => (
+                                        <button type="button" key={type} onClick={() => handleAddSupportToList(type)} className="flex items-center space-x-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md transition">
+                                            <Plus size={16} />
+                                            <span>{type}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="flex justify-end space-x-3 mt-8">
+                        <button type="button" onClick={handleClose} className="py-2 px-4 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200 transition">Cancelar</button>
                         <button type="submit" disabled={loading} className="py-2 px-4 bg-sky-600 text-white rounded-md hover:bg-sky-700 transition flex items-center">
                             {loading ? <Spinner className="h-5 w-5 mr-2" /> : null}
                             Crear Dossier

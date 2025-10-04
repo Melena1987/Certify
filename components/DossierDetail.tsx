@@ -41,6 +41,7 @@ const DossierDetail: React.FC = () => {
     const [viewingImage, setViewingImage] = useState<string | null>(null);
     const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; supportId: string | null }>({ isOpen: false, supportId: null });
     const [rejectionReason, setRejectionReason] = useState('');
+    const [customSupportType, setCustomSupportType] = useState('');
 
     useEffect(() => {
         if (!id) {
@@ -91,15 +92,30 @@ const DossierDetail: React.FC = () => {
     };
 
     const handleAddSupport = (supportType: string) => {
-        if (!dossier || dossier.supports.some(s => s.type === supportType)) return;
+        if (!dossier) return;
+        const trimmedType = supportType.trim();
+        // Case-insensitive check to prevent duplicates
+        if (!trimmedType || dossier.supports.some(s => s.type.toLowerCase() === trimmedType.toLowerCase())) {
+            return;
+        }
+    
         const newSupport: Support = {
             id: Date.now().toString(),
-            type: supportType,
+            type: trimmedType,
             evidences: [],
             status: SupportStatus.PENDING,
         };
         const newSupports = [...dossier.supports, newSupport];
         updateDossier({ supports: newSupports });
+    };
+
+    const handleAddCustomSupport = (e: React.FormEvent) => {
+        e.preventDefault();
+        const trimmedType = customSupportType.trim();
+        if (trimmedType) {
+            handleAddSupport(trimmedType);
+            setCustomSupportType('');
+        }
     };
 
     const handleRemoveSupport = (supportId: string) => {
@@ -311,19 +327,39 @@ const DossierDetail: React.FC = () => {
 
             {dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY' && (
                  <div className="mt-8 border-t pt-6 space-y-4">
-                     {availableSupportTypes.length > 0 && (
-                        <div className="bg-white p-4 rounded-lg shadow-sm">
-                           <h3 className="font-semibold text-slate-700 mb-2">Añadir nuevo soporte</h3>
-                            <div className="flex flex-wrap gap-2">
-                                {availableSupportTypes.map(type => (
-                                    <button key={type} onClick={() => handleAddSupport(type)} className="flex items-center space-x-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md transition">
-                                        <Plus size={16} />
-                                        <span>{type}</span>
-                                    </button>
-                                ))}
+                    <div className="bg-white p-4 rounded-lg shadow-sm">
+                        <h3 className="font-semibold text-slate-700 mb-4">Añadir nuevo soporte</h3>
+                        {availableSupportTypes.length > 0 && (
+                            <div className="mb-4">
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Sugerencias</h4>
+                                <div className="flex flex-wrap gap-2">
+                                    {availableSupportTypes.map(type => (
+                                        <button key={type} onClick={() => handleAddSupport(type)} className="flex items-center space-x-2 text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-md transition">
+                                            <Plus size={16} />
+                                            <span>{type}</span>
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
+                        )}
+                        <div>
+                            <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Soporte Personalizado</h4>
+                            <form onSubmit={handleAddCustomSupport} className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={customSupportType}
+                                    onChange={(e) => setCustomSupportType(e.target.value)}
+                                    placeholder="Ej: Mención en entrevista, flyer, etc."
+                                    className="flex-grow w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-sky-500"
+                                    required
+                                />
+                                <button type="submit" className="bg-slate-600 hover:bg-slate-700 text-white font-semibold text-sm px-4 py-1.5 rounded-md transition whitespace-nowrap flex items-center gap-2">
+                                    <Plus size={16} />
+                                    <span>Añadir</span>
+                                </button>
+                            </form>
                         </div>
-                    )}
+                    </div>
                     <div className="flex justify-end">
                         <button onClick={handleSubmitDossier} disabled={isSubmitting} className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-6 rounded-lg transition flex items-center">
                            {isSubmitting && <Spinner className="h-5 w-5 mr-2" />}
