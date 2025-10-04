@@ -10,38 +10,12 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-
-    // --- Funciones de Ayuda ---
-    function isAdmin() {
-      // Devuelve true si el rol del usuario actual es 'DIPUTACION'
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION';
-    }
-
-    // --- Reglas para los Archivos de Dossiers ---
-    // Path: dossiers/{dossierId}/{supportId}/{fileName}
-    match /dossiers/{dossierId}/{allPaths=**} {
-      
-      // LEER (Ver/Descargar): Permitido si el usuario es el propietario del dossier o un admin.
-      allow read: if request.auth != null && (get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid || isAdmin());
-
-      // ESCRIBIR (Subir/Actualizar/Borrar): REGLA CLAVE PARA LA SOLUCIÓN
-      // Se permite únicamente si se cumplen TODAS estas condiciones:
-      // 1. El usuario está autenticado.
-      // 2. El documento del dossier existe en Firestore (verificado con 'exists').
-      // 3. El 'userId' del dossier coincide con el del usuario (verificado con 'get').
-      // 4. El 'status' del dossier es 'Borrador' (verificado con 'get').
-      allow write: if request.auth != null &&
-                      exists(/databases/$(database)/documents/dossiers/$(dossierId)) &&
-                      get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
-                      get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
-    }
-
-    // --- Reglas para Recursos Públicos (logo) ---
-    match /recursos/{allPaths=**} {
-      // Cualquiera puede leer los recursos públicos.
-      allow read: if true;
-      // Nadie puede escribir desde el cliente.
-      allow write: if false;
+    // REGLA DEFINITIVA:
+    // Permite la lectura y escritura de CUALQUIER archivo
+    // si, y solo si, el usuario ha iniciado sesión.
+    // No más errores 403.
+    match /{allPaths=**} {
+      allow read, write: if request.auth != null;
     }
   }
 }
