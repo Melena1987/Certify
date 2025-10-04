@@ -6,6 +6,7 @@ import Dashboard from './Dashboard';
 import DossierDetail from './DossierDetail';
 import Header from './Header';
 import AdminDashboard from './AdminDashboard';
+import EntityDossiers from './EntityDossiers';
 
 const AppRouter: React.FC = () => {
     const { currentUser } = useAuth();
@@ -45,6 +46,7 @@ const AppRouter: React.FC = () => {
 
             {/* Admin Routes */}
             <Route path="/admin" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+            <Route path="/admin/entity/:entityId" element={<ProtectedRoute><EntityDossiers /></ProtectedRoute>} />
             <Route path="/admin/dossier/:id" element={<ProtectedRoute><DossierDetail /></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to={currentUser ? homePath : "/auth"} />} />

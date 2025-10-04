@@ -86,21 +86,28 @@ const EntityList: React.FC = () => {
     if (loading) return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
 
     return (
-         <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-slate-700 mb-4">Entidades Registradas ({entities.length})</h2>
+         <div className="bg-white rounded-lg shadow">
+            <div className="p-6 border-b">
+              <h2 className="text-xl font-semibold text-slate-700">Entidades Registradas ({entities.length})</h2>
+            </div>
             {entities.length > 0 ? (
                 <ul className="divide-y divide-slate-200">
                     {entities.map(entity => (
-                        <li key={entity.uid} className="py-3 flex items-center justify-between">
-                            <div>
-                                <p className="font-medium text-slate-800">{entity.entityName}</p>
-                                <p className="text-sm text-slate-500">{entity.email}</p>
-                            </div>
+                        <li key={entity.uid}>
+                            <Link to={`/admin/entity/${entity.uid}`} className="block hover:bg-slate-50 transition-colors duration-200">
+                                <div className="py-4 px-6 flex items-center justify-between">
+                                    <div>
+                                        <p className="font-medium text-slate-800">{entity.entityName}</p>
+                                        <p className="text-sm text-slate-500">{entity.email}</p>
+                                    </div>
+                                    <ChevronsRight className="h-5 w-5 text-slate-400" />
+                                </div>
+                            </Link>
                         </li>
                     ))}
                 </ul>
             ) : (
-                <div className="text-center py-10">
+                <div className="text-center py-10 px-6">
                     <Building size={48} className="mx-auto text-slate-400" />
                     <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
                     <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
