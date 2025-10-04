@@ -362,6 +362,9 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
     const statusInfo = supportStatusStyles[support.status] || supportStatusStyles[SupportStatus.PENDING];
     const StatusBadge = statusInfo.icon;
 
+    const urlEvidences = support.evidences.filter(e => e.type === EvidenceType.URL);
+    const imageEvidences = support.evidences.filter(e => e.type === EvidenceType.IMAGE);
+
     return (
          <div className="bg-white rounded-lg shadow-sm transition-shadow duration-300 hover:shadow-md">
             <div className="p-4 border-b flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
@@ -389,32 +392,48 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                     {support.evidences.length === 0 ? (
                         <p className="text-sm text-slate-500 text-center py-4">No hay evidencias para este soporte.</p>
                     ) : (
-                        <ul className="space-y-2">
-                           {support.evidences.map(evidence => (
-                                <li key={evidence.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md">
-                                    <div className="flex items-center space-x-2 overflow-hidden">
-                                        {evidence.type === EvidenceType.IMAGE ? (
-                                            <>
-                                                <Paperclip size={16} className="text-slate-500 flex-shrink-0" />
-                                                <button onClick={() => onViewImage(evidence.value)} className="text-sm text-sky-600 hover:underline truncate" title={evidence.fileName}>
-                                                    {evidence.fileName || 'Ver imagen'}
+                        <div className="space-y-4">
+                             {urlEvidences.length > 0 && (
+                                <div>
+                                    <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Enlaces</h4>
+                                    <ul className="space-y-2">
+                                        {urlEvidences.map(evidence => (
+                                            <li key={evidence.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md group">
+                                                <div className="flex items-center space-x-2 overflow-hidden">
+                                                    <LinkIcon size={16} className="text-slate-500 flex-shrink-0" />
+                                                    <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-600 hover:underline truncate" title={evidence.value}>
+                                                        {evidence.value}
+                                                    </a>
+                                                </div>
+                                                {isEditable && (
+                                                    <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-600 p-1 rounded-full flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} /></button>
+                                                )}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {imageEvidences.length > 0 && (
+                                <div>
+                                    <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Imágenes</h4>
+                                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                                        {imageEvidences.map(evidence => (
+                                            <div key={evidence.id} className="relative group aspect-square">
+                                                <button onClick={() => onViewImage(evidence.value)} className="w-full h-full rounded-md overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-transform duration-200 group-hover:scale-105">
+                                                    <img src={evidence.value} alt={evidence.fileName || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                                 </button>
-                                            </>
-                                        ) : (
-                                            <>
-                                                <LinkIcon size={16} className="text-slate-500 flex-shrink-0" />
-                                                <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-600 hover:underline truncate" title={evidence.value}>
-                                                    {evidence.value}
-                                                </a>
-                                            </>
-                                        )}
+                                                {isEditable && (
+                                                    <button onClick={() => onRemoveEvidence(evidence.id)} className="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 focus:opacity-100" aria-label={`Eliminar imagen ${evidence.fileName}`}>
+                                                        <X size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                    {isEditable && (
-                                        <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-600 p-1 rounded-full flex-shrink-0"><X size={16} /></button>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
+                                </div>
+                            )}
+                        </div>
                     )}
 
                     {isEditable && (
