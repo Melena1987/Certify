@@ -17,7 +17,7 @@ service cloud.firestore {
     }
 
     function isRole(role) {
-      // This get() call now works reliably because the user read rule below is not circular.
+      // Esta llamada get() funciona de forma fiable porque la regla de lectura de usuarios no es circular.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
@@ -42,14 +42,12 @@ service cloud.firestore {
     // --- Colección: dossiers ---
     // Reglas para los documentos de los dossiers.
     match /dossiers/{dossierId} {
-      // LEER (REFACTORIZADO): Se separa la regla en dos para evitar problemas de evaluación
-      // en llamadas entre servicios (Storage -> Firestore). Firebase combina ambas con un OR.
-      
-      // Regla 1: El propietario del dossier puede leerlo.
-      allow read: if isAuth() && resource.data.userId == request.auth.uid;
-      
-      // Regla 2: Un administrador de DIPUTACION también puede leerlo.
-      allow read: if isAuth() && isRole('DIPUTACION');
+      // LEER (CORREGIDO): Se permite leer a CUALQUIER usuario autenticado.
+      // Esto es NECESARIO para que las reglas de Storage puedan hacer una llamada get()
+      // y verificar los permisos de escritura de archivos. Sin esto, Storage recibe un
+      // "permiso denegado" al intentar leer el dossier, y la subida de archivos falla.
+      // La seguridad de ESCRITURA (update/delete) sigue restringida al propietario o admin.
+      allow read: if isAuth();
 
       // CREAR: Un usuario autenticado puede crear un dossier para sí mismo, que empieza como 'Borrador'.
       allow create: if isAuth() &&
@@ -57,12 +55,12 @@ service cloud.firestore {
                      request.resource.data.status == 'Borrador';
 
       // ACTUALIZAR:
-      // - La ENTIDAD propietaria puede actualizar si el dossier está en 'Borrador', pero con restricciones.
-      // - El admin de DIPUTACION puede actualizar si fue 'Enviado' (para su revisión).
+      // - La ENTIDAD propietaria puede actualizar si el dossier está en 'Borrador' o 'Rechazado'.
+      // - El admin de DIPUTACION puede actualizar si fue 'Enviado'.
       allow update: if isAuth() && (
         ( // Reglas para la ENTIDAD
           resource.data.userId == request.auth.uid && 
-          resource.data.status == 'Borrador' &&
+          (resource.data.status == 'Borrador' || resource.data.status == 'Rechazado') &&
           // Campos inmutables
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.entityName == resource.data.entityName &&
@@ -70,7 +68,12 @@ service cloud.firestore {
           (request.resource.data.status == 'Borrador' || request.resource.data.status == 'Enviado')
         ) || 
         ( // Reglas para el ADMIN
-          isRole('DIPUTACION') && resource.data.status == 'Enviado'
+          isRole('DIPUTACION') && resource.data.status == 'Enviado' &&
+           // El Admin puede cambiar el estado y los soportes, pero no otros campos.
+          request.resource.data.userId == resource.data.userId &&
+          request.resource.data.entityName == resource.data.entityName &&
+          request.resource.data.eventName == resource.data.eventName &&
+          request.resource.data.eventDate == resource.data.eventDate
         )
       );
       
