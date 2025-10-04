@@ -86,11 +86,20 @@ const DossierDetail: React.FC = () => {
         }
     };
     
-    const checkAndAutoApproveDossier = (updatedSupports: Support[]) => {
-        const allApproved = updatedSupports.length > 0 && updatedSupports.every(s => s.status === SupportStatus.APPROVED);
-        if (allApproved && dossier?.status !== DossierStatus.APPROVED) {
-            updateDossier({ status: DossierStatus.APPROVED });
+    const determineDossierStatus = (supports: Support[], currentStatus: DossierStatus): DossierStatus => {
+        if (currentStatus !== DossierStatus.SUBMITTED && currentStatus !== DossierStatus.APPROVED) {
+            return currentStatus;
         }
+
+        if (supports.length > 0 && supports.every(s => s.status === SupportStatus.APPROVED)) {
+            return DossierStatus.APPROVED;
+        }
+        
+        if (currentStatus === DossierStatus.APPROVED) {
+            return DossierStatus.SUBMITTED;
+        }
+
+        return currentStatus;
     };
 
     const handleAddSupport = (supportType: string) => {
@@ -128,15 +137,24 @@ const DossierDetail: React.FC = () => {
 
     const handleUpdateSupportStatus = (supportId: string, status: SupportStatus, reason: string = '') => {
         if (!dossier) return;
-        const newSupports = dossier.supports.map(s => {
+
+        const updatedSupports = dossier.supports.map(s => {
             if (s.id === supportId) {
-                return { ...s, status, rejectionReason: reason || '' };
+                return { ...s, status, rejectionReason: status === SupportStatus.APPROVED ? '' : reason };
             }
             return s;
         });
-        updateDossier({ supports: newSupports });
-        checkAndAutoApproveDossier(newSupports);
+
+        const updates: Partial<Dossier> = { supports: updatedSupports };
+        
+        const newDossierStatus = determineDossierStatus(updatedSupports, dossier.status);
+        if (newDossierStatus !== dossier.status) {
+            updates.status = newDossierStatus;
+        }
+
+        updateDossier(updates);
     };
+
 
     const handleAddEvidence = async (supportId: string, type: EvidenceType, value: string | File) => {
         if (!dossier) return;
@@ -509,6 +527,12 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
     const { support, userRole, onAddEvidence, onRemoveEvidence, onRemoveSupport, onUpdateStatus, onRejectWithReason, isUploading, isEditable, isReviewable, evidenceError, onViewImage } = props;
     const [isCollapsed, setIsCollapsed] = useState(support.status === SupportStatus.APPROVED);
     const [urlValue, setUrlValue] = useState('');
+
+    useEffect(() => {
+        if (support.status === SupportStatus.APPROVED) {
+            setIsCollapsed(true);
+        }
+    }, [support.status]);
 
     const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (e.target.files?.[0]) {
