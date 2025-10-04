@@ -11,24 +11,37 @@ rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
 
+    // --- Funciones de Ayuda ---
+    // Estas funciones centralizan la lógica para mejorar la legibilidad y el mantenimiento.
+
+    // Verifica si el usuario autenticado es el propietario de un dossier.
+    function isOwner(dossierId) {
+      return get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid;
+    }
+
+    // Verifica si el usuario autenticado es un administrador.
+    function isAdmin() {
+      // Se asume que el perfil del usuario existe. La app debería garantizar esto.
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION';
+    }
+
+    // Verifica si el dossier está en estado 'Borrador'.
+    function isDraft(dossierId) {
+      return get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
+    }
+    
     // --- Reglas para los Archivos de Dossiers ---
     // Se aplica a la ruta: dossiers/{dossierId}/{supportId}/{fileName}
     match /dossiers/{dossierId}/{supportId}/{fileName} {
       
       // LEER (Ver/Descargar):
-      // Permitido si el usuario es el propietario del dossier o un admin de DIPUTACION.
-      // Se consulta Firestore para verificarlo.
-      allow read: if request.auth != null && (
-        get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid ||
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION'
-      );
+      // Permitido si el usuario es el propietario del dossier o un admin.
+      allow read: if request.auth != null && (isOwner(dossierId) || isAdmin());
 
       // ESCRIBIR (Subir y Borrar):
-      // Permitido si el usuario es la ENTIDAD propietaria del dossier Y el dossier está en 'Borrador'.
-      // Los administradores no pueden subir ni borrar archivos, solo cambiar el estado del soporte.
-      allow write: if request.auth != null &&
-        get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
-        get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
+      // Permitido si el usuario es el propietario del dossier Y el dossier está en 'Borrador'.
+      // Las dos llamadas a get() son necesarias aquí.
+      allow write: if request.auth != null && isOwner(dossierId) && isDraft(dossierId);
     }
 
     // --- Reglas para Recursos Públicos (logo) ---
