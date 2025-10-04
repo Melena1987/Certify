@@ -28,16 +28,20 @@ service firebase.storage {
     // Verifica si el usuario puede escribir (subir/borrar) archivos en un dossier.
     // Esta es la función clave que resuelve el problema de permisos.
     function canWriteToDossier(dossierId) {
-      // Primero, obtenemos el recurso del dossier desde Firestore.
-      let dossierResource = get(/databases/$(database)/documents/dossiers/$(dossierId));
+      // CORRECCIÓN ROBUSTA:
+      // 1. Usamos exists() que es más seguro. Falla de forma controlada si no se tiene
+      //    permiso de lectura o el documento no existe.
+      if (!exists(/databases/$(database)/documents/dossiers/$(dossierId))) {
+        return false;
+      }
       
-      // LA CORRECCIÓN CRÍTICA:
-      // Verificamos que el recurso no sea nulo ANTES de intentar acceder a su propiedad '.data'.
-      // Esto maneja de forma robusta el retardo de propagación, donde el documento puede no ser
-      // encontrado inmediatamente después de su creación.
-      return dossierResource != null && 
-             dossierResource.data.userId == request.auth.uid && 
-             dossierResource.data.status == 'Borrador';
+      // 2. Si exists() es true, significa que tenemos permiso de lectura (gracias a la
+      //    regla de Firestore) y el documento existe. Ahora podemos obtener sus datos.
+      let dossierData = get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
+      
+      // 3. Verificamos la propiedad y el estado del dossier.
+      return dossierData.userId == request.auth.uid && 
+             dossierData.status == 'Borrador';
     }
 
     // --- Reglas para los Archivos de Dossiers ---
@@ -49,7 +53,7 @@ service firebase.storage {
       allow read: if request.auth != null && (isDossierOwner(dossierId) || isAdmin());
 
       // ESCRIBIR (Subir, Actualizar y Borrar):
-      // Permitido únicamente si el usuario es el propietario del dossier Y el dossier está en 'Borrador'.
+      // Permitido únicamente si la función robusta canWriteToDossier() devuelve true.
       allow write: if request.auth != null && canWriteToDossier(dossierId);
     }
 
