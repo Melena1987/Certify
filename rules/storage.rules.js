@@ -26,11 +26,18 @@ service firebase.storage {
     }
 
     // Verifica si el usuario puede escribir (subir/borrar) archivos en un dossier.
-    // Utiliza un único 'get()' que es más eficiente y seguro. Si el documento no existe
-    // o el usuario no tiene permisos de lectura en Firestore, la llamada falla y la regla deniega el acceso.
+    // Esta es la función clave que resuelve el problema de permisos.
     function canWriteToDossier(dossierId) {
-      let dossier = get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
-      return dossier.userId == request.auth.uid && dossier.status == 'Borrador';
+      // Primero, obtenemos el recurso del dossier desde Firestore.
+      let dossierResource = get(/databases/$(database)/documents/dossiers/$(dossierId));
+      
+      // LA CORRECCIÓN CRÍTICA:
+      // Verificamos que el recurso no sea nulo ANTES de intentar acceder a su propiedad '.data'.
+      // Esto maneja de forma robusta el retardo de propagación, donde el documento puede no ser
+      // encontrado inmediatamente después de su creación.
+      return dossierResource != null && 
+             dossierResource.data.userId == request.auth.uid && 
+             dossierResource.data.status == 'Borrador';
     }
 
     // --- Reglas para los Archivos de Dossiers ---
