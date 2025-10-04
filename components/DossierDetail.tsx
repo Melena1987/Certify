@@ -9,7 +9,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType, SupportStatus } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, FileText, ChevronRight, ChevronDown, CheckCircle, Flag } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, FileText, ChevronRight, ChevronDown, CheckCircle, Flag, Download } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -42,6 +42,8 @@ const DossierDetail: React.FC = () => {
     const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; supportId: string | null }>({ isOpen: false, supportId: null });
     const [rejectionReason, setRejectionReason] = useState('');
     const [customSupportType, setCustomSupportType] = useState('');
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
 
     useEffect(() => {
         if (!id) {
@@ -275,6 +277,100 @@ const DossierDetail: React.FC = () => {
         }
     };
 
+    const handleDownloadPdf = async () => {
+        if (!dossier) return;
+
+        setIsGeneratingPdf(true);
+
+        let htmlContent = `
+            <html>
+            <head>
+                <title>Dossier: ${dossier.eventName}</title>
+                <style>
+                    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; margin: 2rem; color: #334155; }
+                    h1, h2, h3 { color: #0284c7; }
+                    h1 { font-size: 2rem; }
+                    h2 { font-size: 1.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; margin-top: 2.5rem; }
+                    h3 { font-size: 1.2rem; margin-top: 1.5rem; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #cbd5e1; padding-bottom: 1rem; }
+                    .logo { height: 48px; }
+                    .details { background-color: #f1f5f9; padding: 1.5rem; border-radius: 0.5rem; margin-top: 1rem; }
+                    .support-card { page-break-inside: avoid; margin-bottom: 1.5rem; }
+                    .evidence-list { list-style: none; padding-left: 0; }
+                    .evidence-item { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+                    .evidence-item a { color: #0369a1; text-decoration: none; word-break: break-all; }
+                    .evidence-item a:hover { text-decoration: underline; }
+                    .image-container { margin-top: 1rem; }
+                    .evidence-image { max-width: 200px; max-height: 200px; border: 1px solid #e2e8f0; border-radius: 0.25rem; margin-bottom: 0.5rem; }
+                    @media print {
+                        body { margin: 1rem; }
+                        .no-print { display: none; }
+                        h2 { margin-top: 2rem; }
+                    }
+                </style>
+            </head>
+            <body>
+                <header class="header">
+                     <div style="display: flex; align-items: center; gap: 1rem;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#0ea5e9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                        <span style="font-size: 1.5rem; font-weight: bold; color: #1e293b;">Certify</span>
+                     </div>
+                     <img class="logo" src="https://firebasestorage.googleapis.com/v0/b/certify-diputacion.firebasestorage.app/o/recursos%2Fmarca_mlg_compite_diputacion_monocromatico_azul.png?alt=media&token=f2295896-b2f4-44c2-a3f8-8f895e994eb8" alt="Logo Diputación de Málaga" />
+                </header>
+
+                <h1>Dossier de Justificación</h1>
+                <div class="details">
+                    <p><strong>Evento:</strong> ${dossier.eventName}</p>
+                    <p><strong>Entidad:</strong> ${dossier.entityName}</p>
+                    <p><strong>Fecha del Evento:</strong> ${new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
+                    <p><strong>Estado:</strong> ${dossier.status}</p>
+                </div>
+        `;
+
+        for (const support of dossier.supports) {
+            htmlContent += `
+                <div class="support-card">
+                    <h2>Soporte: ${support.type}</h2>
+            `;
+            const urlEvidences = support.evidences.filter(e => e.type === 'url');
+            const imageEvidences = support.evidences.filter(e => e.type === 'image');
+            if (support.evidences.length === 0) {
+                 htmlContent += '<p style="color: #64748b;">No se han adjuntado evidencias para este soporte.</p>';
+            }
+            if (urlEvidences.length > 0) {
+                htmlContent += '<h3>Enlaces</h3><ul class="evidence-list">';
+                urlEvidences.forEach(e => {
+                    htmlContent += `<li class="evidence-item"><a href="${e.value}" target="_blank">${e.value}</a></li>`;
+                });
+                htmlContent += '</ul>';
+            }
+            if (imageEvidences.length > 0) {
+                htmlContent += '<h3>Imágenes</h3>';
+                imageEvidences.forEach(e => {
+                    htmlContent += `<div class="image-container"><img src="${e.value}" class="evidence-image" alt="${e.fileName || 'Evidencia'}"/></div>`;
+                });
+            }
+            htmlContent += `</div>`;
+        }
+
+        htmlContent += `</body></html>`;
+        
+        const printWindow = window.open('', '_blank');
+        if (printWindow) {
+            printWindow.document.write(htmlContent);
+            printWindow.document.close();
+            setTimeout(() => {
+                printWindow.focus();
+                printWindow.print();
+                setIsGeneratingPdf(false);
+            }, 1000); // Delay to allow images to load
+        } else {
+            alert("No se pudo abrir la ventana de impresión. Por favor, deshabilita el bloqueador de pop-ups.");
+            setIsGeneratingPdf(false);
+        }
+    };
+
+
     if (loading) return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
     if (error) return <div className="text-center py-10 text-red-600 bg-red-50 rounded-lg">{error}</div>;
     if (!dossier) return null;
@@ -292,14 +388,26 @@ const DossierDetail: React.FC = () => {
             </RouterLink>
 
             <div className={`p-6 border-l-4 rounded-lg mb-8 ${statusStyle.container}`}>
-                <div className="flex justify-between items-start">
+                <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-800">{dossier.eventName}</h1>
                         <p className="text-slate-500">{dossier.entityName} - {new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
                     </div>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${statusStyle.text} ${statusStyle.container.replace('border-l-4', '')}`}>
-                        {dossier.status}
-                    </span>
+                     <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 w-full sm:w-auto">
+                        <span className={`text-sm font-bold px-3 py-1 rounded-full ${statusStyle.text} ${statusStyle.container.replace('border-l-4', '')} self-start sm:self-center`}>
+                            {dossier.status}
+                        </span>
+                        {dossier.status === DossierStatus.APPROVED && (
+                            <button
+                                onClick={handleDownloadPdf}
+                                disabled={isGeneratingPdf}
+                                className="flex items-center justify-center space-x-2 bg-sky-600 text-white py-2 px-4 rounded-lg shadow-md hover:bg-sky-700 transition disabled:bg-slate-400 w-full sm:w-auto"
+                            >
+                                {isGeneratingPdf ? <Spinner className="h-5 w-5"/> : <Download size={18} />}
+                                <span>{isGeneratingPdf ? 'Generando...' : 'Descargar PDF'}</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
             </div>
             
