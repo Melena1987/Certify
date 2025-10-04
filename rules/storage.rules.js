@@ -21,18 +21,16 @@ service firebase.storage {
     }
     
     // Verifica si el usuario es el propietario de un dossier para leerlo.
-    function canReadDossier(dossierId) {
+    function isDossierOwner(dossierId) {
       return get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid;
     }
 
     // Verifica si el usuario puede escribir (subir/borrar) archivos en un dossier.
-    // Se comprueba primero la existencia del documento para evitar errores por delays de propagación.
+    // Utiliza un único 'get()' que es más eficiente y seguro. Si el documento no existe
+    // o el usuario no tiene permisos de lectura en Firestore, la llamada falla y la regla deniega el acceso.
     function canWriteToDossier(dossierId) {
-      if (exists(/databases/$(database)/documents/dossiers/$(dossierId))) {
-        let dossierData = get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
-        return dossierData.userId == request.auth.uid && dossierData.status == 'Borrador';
-      }
-      return false;
+      let dossier = get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
+      return dossier.userId == request.auth.uid && dossier.status == 'Borrador';
     }
 
     // --- Reglas para los Archivos de Dossiers ---
@@ -41,10 +39,10 @@ service firebase.storage {
       
       // LEER (Ver/Descargar):
       // Permitido si el usuario es el propietario del dossier o un admin.
-      allow read: if request.auth != null && (canReadDossier(dossierId) || isAdmin());
+      allow read: if request.auth != null && (isDossierOwner(dossierId) || isAdmin());
 
-      // ESCRIBIR (Subir y Borrar):
-      // Permitido si el usuario es el propietario del dossier Y el dossier está en 'Borrador'.
+      // ESCRIBIR (Subir, Actualizar y Borrar):
+      // Permitido únicamente si el usuario es el propietario del dossier Y el dossier está en 'Borrador'.
       allow write: if request.auth != null && canWriteToDossier(dossierId);
     }
 
