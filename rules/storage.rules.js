@@ -24,12 +24,12 @@ service firebase.storage {
       // LEER (Ver/Descargar): Permitido si el usuario es el propietario del dossier o un admin.
       allow read: if request.auth != null && (get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid || isAdmin());
 
-      // ESCRIBIR (Subir/Actualizar/Borrar): REGLA CORREGIDA Y MÁS ROBUSTA
+      // ESCRIBIR (Subir/Actualizar/Borrar): REGLA CLAVE PARA LA SOLUCIÓN
       // Se permite únicamente si se cumplen TODAS estas condiciones:
       // 1. El usuario está autenticado.
-      // 2. El documento del dossier existe en Firestore.
-      // 3. El 'userId' del dossier coincide con el del usuario.
-      // 4. El 'status' del dossier es 'Borrador'.
+      // 2. El documento del dossier existe en Firestore (verificado con 'exists').
+      // 3. El 'userId' del dossier coincide con el del usuario (verificado con 'get').
+      // 4. El 'status' del dossier es 'Borrador' (verificado con 'get').
       allow write: if request.auth != null &&
                       exists(/databases/$(database)/documents/dossiers/$(dossierId)) &&
                       get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
@@ -38,8 +38,10 @@ service firebase.storage {
 
     // --- Reglas para Recursos Públicos (logo) ---
     match /recursos/{allPaths=**} {
+      // Cualquiera puede leer los recursos públicos.
       allow read: if true;
-      allow write: if false; // Nadie puede escribir desde el cliente.
+      // Nadie puede escribir desde el cliente.
+      allow write: if false;
     }
   }
 }

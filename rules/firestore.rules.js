@@ -29,12 +29,13 @@ service cloud.firestore {
                      request.resource.data.uid == request.auth.uid;
       
       allow update: if isAuth() && request.auth.uid == userId &&
+                     // Un usuario no puede cambiar su propio rol.
                      request.resource.data.role == resource.data.role;
     }
 
     // --- Colección: dossiers ---
     match /dossiers/{dossierId} {
-      // LEER (REGLA CORREGIDA):
+      // LEER (REGLA CLAVE PARA LA SOLUCIÓN):
       // Se permite la lectura a cualquier usuario autenticado.
       // Esto es crucial para que las reglas de Storage puedan verificar el estado y la propiedad del dossier.
       // La seguridad se mantiene porque las reglas de escritura (create, update, delete) siguen siendo estrictas.
@@ -46,20 +47,19 @@ service cloud.firestore {
                      request.resource.data.status == 'Borrador';
 
       // ACTUALIZAR:
-      // - La ENTIDAD propietaria puede actualizar si el dossier está en 'Borrador' o 'Rechazado'.
-      // - El admin de DIPUTACION puede actualizar si fue 'Enviado'.
       allow update: if isAuth() && (
-        ( // Reglas para la ENTIDAD
+        ( // Reglas para la ENTIDAD: Puede editar si es suyo y está en Borrador o Rechazado.
           resource.data.userId == request.auth.uid && 
           (resource.data.status == 'Borrador' || resource.data.status == 'Rechazado') &&
-          // Campos inmutables
+          // Campos que la entidad no puede modificar.
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.entityName == resource.data.entityName &&
-          // Transiciones de estado permitidas
+          // Transiciones de estado permitidas para la entidad.
           (request.resource.data.status == 'Borrador' || request.resource.data.status == 'Enviado')
         ) || 
-        ( // Reglas para el ADMIN (puede revisar y cambiar estado y soportes)
+        ( // Reglas para el ADMIN (DIPUTACION): Puede revisar y cambiar el estado/soportes si fue 'Enviado'.
           isRole('DIPUTACION') && resource.data.status == 'Enviado' &&
+          // Campos que el admin no debe modificar.
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.entityName == resource.data.entityName &&
           request.resource.data.eventName == resource.data.eventName &&
