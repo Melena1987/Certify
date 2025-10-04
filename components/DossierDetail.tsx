@@ -152,7 +152,21 @@ const DossierDetail: React.FC = () => {
             try {
                 const fileRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}-${value.name}`);
                 const snapshot = await uploadBytes(fileRef, value);
-                const downloadURL = await getDownloadURL(snapshot.ref);
+                
+                // Retry logic for getDownloadURL to handle permission propagation delays
+                let downloadURL = '';
+                let attempts = 3;
+                while (attempts > 0) {
+                    try {
+                        downloadURL = await getDownloadURL(snapshot.ref);
+                        break; // Success
+                    } catch (urlError) {
+                        attempts--;
+                        if (attempts === 0) throw urlError; // Rethrow last error
+                        await new Promise(res => setTimeout(res, 500 * (4 - attempts))); // Exponential backoff
+                    }
+                }
+
                 newEvidence = {
                     id: Date.now().toString(),
                     type: EvidenceType.IMAGE,
@@ -439,7 +453,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                     {isEditable && (
                         <div className="border-t pt-4 space-y-3">
                            <h4 className="text-sm font-medium text-slate-600">Añadir evidencia</h4>
-                            {evidenceError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded">{evidenceError}</p>}
+                            {evidenceError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded-md">{evidenceError}</p>}
                             <form onSubmit={handleAddUrl} className="flex items-center gap-2">
                                 <input type="url" value={urlValue} onChange={(e) => setUrlValue(e.target.value)} placeholder="https://ejemplo.com" className="flex-grow w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-sky-500" />
                                 <button type="submit" className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-sm px-3 py-1.5 rounded-md transition whitespace-nowrap">Añadir URL</button>

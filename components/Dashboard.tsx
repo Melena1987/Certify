@@ -195,7 +195,7 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
             const newSupports: Support[] = identifiedSupports
                 .filter((type: string) => SUPPORT_TYPES.includes(type))
                 .map((type: string) => ({
-                    id: `${Date.now()}-${type.replace(/\s+/g, '-')}`,
+                    id: Date.now().toString(),
                     type,
                     evidences: [],
                     status: SupportStatus.PENDING,
