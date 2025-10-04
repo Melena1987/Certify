@@ -42,8 +42,14 @@ service cloud.firestore {
     // --- Colección: dossiers ---
     // Reglas para los documentos de los dossiers.
     match /dossiers/{dossierId} {
-      // LEER: El propietario o un admin de DIPUTACION pueden leer.
-      allow read: if isAuth() && (resource.data.userId == request.auth.uid || isRole('DIPUTACION'));
+      // LEER (REFACTORIZADO): Se separa la regla en dos para evitar problemas de evaluación
+      // en llamadas entre servicios (Storage -> Firestore). Firebase combina ambas con un OR.
+      
+      // Regla 1: El propietario del dossier puede leerlo.
+      allow read: if isAuth() && resource.data.userId == request.auth.uid;
+      
+      // Regla 2: Un administrador de DIPUTACION también puede leerlo.
+      allow read: if isAuth() && isRole('DIPUTACION');
 
       // CREAR: Un usuario autenticado puede crear un dossier para sí mismo, que empieza como 'Borrador'.
       allow create: if isAuth() &&
