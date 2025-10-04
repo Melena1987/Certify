@@ -5,23 +5,30 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import type { Dossier, Support, Evidence } from '../types';
-import { DossierStatus, EvidenceType } from '../types';
+import { DossierStatus, EvidenceType, SupportStatus } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronUp, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronUp, ChevronDown, CheckCircle, Flag, Info } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
-const statusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
+const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
     [DossierStatus.DRAFT]: { container: 'border-yellow-300 bg-yellow-50', text: 'text-yellow-700' },
     [DossierStatus.SUBMITTED]: { container: 'border-blue-300 bg-blue-50', text: 'text-blue-700' },
     [DossierStatus.APPROVED]: { container: 'border-green-300 bg-green-50', text: 'text-green-700' },
     [DossierStatus.REJECTED]: { container: 'border-red-300 bg-red-50', text: 'text-red-700' },
 };
 
+const supportStatusStyles: { [key in SupportStatus]: { badge: string, icon: React.ElementType, title: string } } = {
+    [SupportStatus.PENDING]: { badge: 'bg-slate-100 text-slate-600', icon: Info, title: 'Pendiente' },
+    [SupportStatus.APPROVED]: { badge: 'bg-green-100 text-green-700', icon: CheckCircle, title: 'Aprobado' },
+    [SupportStatus.REJECTED]: { badge: 'bg-red-100 text-red-700', icon: AlertTriangle, title: 'Incidencia' },
+};
+
 const DossierDetail: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const { currentUser } = useAuth();
+    const userRole = currentUser?.profile?.role;
     const { apiKeyError } = useApiKey();
     const [dossier, setDossier] = useState<Dossier | null>(null);
     const [loading, setLoading] = useState(true);
@@ -31,7 +38,8 @@ const DossierDetail: React.FC = () => {
     const [isUploading, setIsUploading] = useState<string | null>(null);
     const [evidenceError, setEvidenceError] = useState<Record<string, string | null>>({});
     const [viewingImage, setViewingImage] = useState<string | null>(null);
-
+    const [rejectionModal, setRejectionModal] = useState<{ isOpen: boolean; supportId: string | null }>({ isOpen: false, supportId: null });
+    const [rejectionReason, setRejectionReason] = useState('');
 
     useEffect(() => {
         if (!id) {
@@ -44,8 +52,7 @@ const DossierDetail: React.FC = () => {
         const unsubscribe = onSnapshot(dossierRef, (docSnap) => {
             if (docSnap.exists()) {
                 const data = docSnap.data() as Omit<Dossier, 'id'>;
-                // Basic validation for user access
-                if (currentUser && data.userId === currentUser.uid) {
+                if (currentUser && (data.userId === currentUser.uid || userRole === 'DIPUTACION')) {
                     setDossier({ id: docSnap.id, ...data });
                     setError(null);
                 } else {
@@ -62,16 +69,23 @@ const DossierDetail: React.FC = () => {
         });
 
         return () => unsubscribe();
-    }, [id, currentUser]);
+    }, [id, currentUser, userRole]);
 
-    const updateSupports = async (newSupports: Support[]) => {
+    const updateDossier = async (updates: Partial<Dossier>) => {
         if (!dossier) return;
         try {
             const dossierRef = doc(db, 'dossiers', dossier.id);
-            await updateDoc(dossierRef, { supports: newSupports });
+            await updateDoc(dossierRef, updates);
         } catch (err) {
-            console.error("Error updating supports:", err);
+            console.error("Error updating dossier:", err);
             alert("Error al guardar los cambios. Inténtalo de nuevo.");
+        }
+    };
+    
+    const checkAndAutoApproveDossier = (updatedSupports: Support[]) => {
+        const allApproved = updatedSupports.length > 0 && updatedSupports.every(s => s.status === SupportStatus.APPROVED);
+        if (allApproved && dossier?.status !== DossierStatus.APPROVED) {
+            updateDossier({ status: DossierStatus.APPROVED });
         }
     };
 
@@ -80,128 +94,123 @@ const DossierDetail: React.FC = () => {
         const newSupport: Support = {
             id: Date.now().toString(),
             type: supportType,
-            evidences: []
+            evidences: [],
+            status: SupportStatus.PENDING,
         };
         const newSupports = [...dossier.supports, newSupport];
-        updateSupports(newSupports);
+        updateDossier({ supports: newSupports });
     };
 
     const handleRemoveSupport = (supportId: string) => {
         if (!dossier) return;
         const newSupports = dossier.supports.filter(s => s.id !== supportId);
-        updateSupports(newSupports);
+        updateDossier({ supports: newSupports });
+    };
+
+    const handleUpdateSupportStatus = (supportId: string, status: SupportStatus, reason: string = '') => {
+        if (!dossier) return;
+        const newSupports = dossier.supports.map(s => {
+            if (s.id === supportId) {
+                return { ...s, status, rejectionReason: reason || '' };
+            }
+            return s;
+        });
+        updateDossier({ supports: newSupports });
+        checkAndAutoApproveDossier(newSupports);
     };
 
     const handleAddEvidence = async (supportId: string, type: EvidenceType, value: string | File) => {
         if (!dossier) return;
-        const originalSupports = dossier.supports;
+        
+        const setSupportError = (message: string | null) => {
+            setEvidenceError(prev => ({ ...prev, [supportId]: message }));
+        };
 
-        // Check for duplicate URL before anything else
+        setSupportError(null);
+
+        const supportIndex = dossier.supports.findIndex(s => s.id === supportId);
+        if (supportIndex === -1) return;
+
+        let newEvidence: Evidence | null = null;
+
         if (type === EvidenceType.URL) {
-            const url = value as string;
-            const targetSupport = dossier.supports.find(s => s.id === supportId);
-            if (targetSupport?.evidences.some(e => e.type === EvidenceType.URL && e.value === url)) {
-                alert('Esta URL ya ha sido añadida como evidencia.');
-                return; // Exit the function if a duplicate is found
+            if (typeof value !== 'string' || !value.trim()) {
+                setSupportError('La URL no puede estar vacía.');
+                return;
+            }
+            if (!/^(https?:\/\/)/.test(value)) {
+                setSupportError('Introduce una URL válida (ej: http://...)');
+                return;
+            }
+            newEvidence = {
+                id: Date.now().toString(),
+                type: EvidenceType.URL,
+                value: value,
+            };
+        } else if (type === EvidenceType.IMAGE && value instanceof File) {
+            setIsUploading(supportId);
+            try {
+                const fileRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}-${value.name}`);
+                const snapshot = await uploadBytes(fileRef, value);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+                newEvidence = {
+                    id: Date.now().toString(),
+                    type: EvidenceType.IMAGE,
+                    value: downloadURL,
+                    fileName: value.name
+                };
+            } catch (err) {
+                console.error("Error uploading file:", err);
+                setSupportError('Error al subir la imagen.');
+            } finally {
+                setIsUploading(null);
             }
         }
 
-        setIsUploading(supportId);
-        setEvidenceError(prev => ({ ...prev, [supportId]: null }));
-        
-        try {
-            let evidenceValue = '';
-            let fileName: string | undefined = undefined;
-
-            if (type === EvidenceType.URL) {
-                evidenceValue = value as string;
-            } else if (type === EvidenceType.IMAGE && value instanceof File) {
-                if (!currentUser) {
-                    throw new Error("Usuario no autenticado para subir archivos.");
-                }
-                const file = value;
-                fileName = file.name;
-
-                const metadata = {
-                    customMetadata: {
-                        'ownerId': currentUser.uid,
-                        'dossierStatus': dossier.status
-                    }
-                };
-
-                const storageRef = ref(storage, `dossiers/${dossier.id}/${supportId}/${Date.now()}_${file.name}`);
-                await uploadBytes(storageRef, file, metadata);
-                evidenceValue = await getDownloadURL(storageRef);
-            }
-
-            const newEvidence: Evidence = {
-                id: Date.now().toString(),
-                type,
-                value: evidenceValue,
-            };
-
-            if (fileName) {
-                newEvidence.fileName = fileName;
-            }
-
-            const newSupports = dossier.supports.map(s => {
-                if (s.id === supportId) {
-                    return { ...s, evidences: [...s.evidences, newEvidence] };
-                }
-                return s;
-            });
-            
-            // Optimistic UI update
-            setDossier(prev => prev ? { ...prev, supports: newSupports } : null);
-
-            await updateSupports(newSupports);
-        } catch (err: any) {
-            console.error("Error adding evidence:", err);
-            let userMessage = "Ocurrió un error al añadir la evidencia. Se restaurará el estado anterior.";
-            if (err.code === 'storage/unauthorized') {
-                userMessage = "Error de permisos: No tienes autorización para subir este archivo. Asegúrate de que las reglas de Storage son correctas y que el dossier está en estado 'Borrador'.";
-            } else if (err.code) {
-                userMessage = `Error: ${err.code}. Por favor, inténtalo de nuevo.`;
-            }
-            setEvidenceError(prev => ({ ...prev, [supportId]: userMessage }));
-            // Revert on failure
-            setDossier(prev => prev ? { ...prev, supports: originalSupports } : null);
-        } finally {
-            setIsUploading(null);
+        if (newEvidence) {
+            const newSupports = [...dossier.supports];
+            newSupports[supportIndex].evidences.push(newEvidence);
+            await updateDossier({ supports: newSupports });
         }
     };
 
     const handleRemoveEvidence = async (supportId: string, evidenceId: string) => {
         if (!dossier) return;
-        
-        const support = dossier.supports.find(s => s.id === supportId);
-        const evidence = support?.evidences.find(e => e.id === evidenceId);
 
-        if (evidence?.type === EvidenceType.IMAGE) {
+        const supportIndex = dossier.supports.findIndex(s => s.id === supportId);
+        if (supportIndex === -1) return;
+
+        const support = dossier.supports[supportIndex];
+        const evidenceToRemove = support.evidences.find(e => e.id === evidenceId);
+
+        if (!evidenceToRemove) return;
+
+        // Delete from storage if it's an image
+        if (evidenceToRemove.type === EvidenceType.IMAGE) {
             try {
-                const imageRef = ref(storage, evidence.value);
+                const imageRef = ref(storage, evidenceToRemove.value);
                 await deleteObject(imageRef);
-            } catch (err) {
-                console.error("Could not delete file from storage, it might not exist:", err);
+            } catch (error: any) {
+                if (error.code !== 'storage/object-not-found') {
+                    console.error("Error deleting evidence file:", error);
+                    alert("No se pudo borrar el archivo de la evidencia. Por favor, inténtalo de nuevo.");
+                    return;
+                }
             }
         }
 
-        const newSupports = dossier.supports.map(s => {
-            if (s.id === supportId) {
-                return { ...s, evidences: s.evidences.filter(e => e.id !== evidenceId) };
-            }
-            return s;
-        });
+        const newEvidences = support.evidences.filter(e => e.id !== evidenceId);
+        const newSupports = [...dossier.supports];
+        newSupports[supportIndex] = { ...support, evidences: newEvidences };
 
-        updateSupports(newSupports);
+        await updateDossier({ supports: newSupports });
     };
 
     const handleSubmitDossier = async () => {
         if (!dossier) return;
         setIsSubmitting(true);
         try {
-            const dossierRef = doc(db, 'dossiers', dossier.id);
-            await updateDoc(dossierRef, { status: DossierStatus.SUBMITTED });
+            await updateDossier({ status: DossierStatus.SUBMITTED });
             navigate('/');
         } catch (err) {
             console.error("Error submitting dossier:", err);
@@ -211,26 +220,43 @@ const DossierDetail: React.FC = () => {
         }
     };
 
+    const handleOpenRejectionModal = (supportId: string) => {
+        setRejectionModal({ isOpen: true, supportId });
+    };
+    
+    const handleCloseRejectionModal = () => {
+        setRejectionModal({ isOpen: false, supportId: null });
+        setRejectionReason('');
+    };
+
+    const handleConfirmRejection = () => {
+        if (rejectionModal.supportId && rejectionReason) {
+            handleUpdateSupportStatus(rejectionModal.supportId, SupportStatus.REJECTED, rejectionReason);
+            handleCloseRejectionModal();
+        }
+    };
+
     if (loading) return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
     if (error) return <div className="text-center py-10 text-red-600 bg-red-50 rounded-lg">{error}</div>;
     if (!dossier) return null;
 
     const availableSupportTypes = SUPPORT_TYPES.filter(type => !dossier.supports.some(s => s.type === type));
+    const backLink = userRole === 'DIPUTACION' ? '/admin' : '/';
 
     return (
         <div className="max-w-4xl mx-auto">
-            <RouterLink to="/" className="flex items-center space-x-2 text-sky-600 hover:underline mb-6">
+            <RouterLink to={backLink} className="flex items-center space-x-2 text-sky-600 hover:underline mb-6">
                 <ArrowLeft size={18} />
-                <span>Volver al Dashboard</span>
+                <span>Volver al Panel</span>
             </RouterLink>
 
-            <div className={`p-6 border-l-4 rounded-lg mb-8 ${statusStyles[dossier.status].container}`}>
+            <div className={`p-6 border-l-4 rounded-lg mb-8 ${dossierStatusStyles[dossier.status].container}`}>
                 <div className="flex justify-between items-start">
                     <div>
                         <h1 className="text-3xl font-bold text-slate-800">{dossier.eventName}</h1>
                         <p className="text-slate-500">{dossier.entityName} - {new Date(dossier.eventDate).toLocaleDateString('es-ES')}</p>
                     </div>
-                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${statusStyles[dossier.status].text} ${statusStyles[dossier.status].container.replace('border-l-4', '')}`}>
+                    <span className={`text-sm font-bold px-3 py-1 rounded-full ${dossierStatusStyles[dossier.status].text} ${dossierStatusStyles[dossier.status].container.replace('border-l-4', '')}`}>
                         {dossier.status}
                     </span>
                 </div>
@@ -243,19 +269,23 @@ const DossierDetail: React.FC = () => {
                     <SupportCard 
                         key={support.id} 
                         support={support}
+                        userRole={userRole}
                         onAddEvidence={(type, value) => handleAddEvidence(support.id, type, value)}
                         onRemoveEvidence={(evidenceId) => handleRemoveEvidence(support.id, evidenceId)}
                         onRemoveSupport={() => handleRemoveSupport(support.id)}
+                        onUpdateStatus={handleUpdateSupportStatus}
+                        onRejectWithReason={() => handleOpenRejectionModal(support.id)}
                         isUploading={isUploading === support.id}
-                        isEditable={dossier.status === DossierStatus.DRAFT}
+                        isEditable={dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY'}
+                        isReviewable={dossier.status === DossierStatus.SUBMITTED && userRole === 'DIPUTACION'}
                         evidenceError={evidenceError[support.id] || null}
                         onViewImage={setViewingImage}
                     />
                 ))}
             </div>
 
-            {dossier.status === DossierStatus.DRAFT && (
-                <div className="mt-8 border-t pt-6 space-y-4">
+            {dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY' && (
+                 <div className="mt-8 border-t pt-6 space-y-4">
                      {availableSupportTypes.length > 0 && (
                         <div className="bg-white p-4 rounded-lg shadow-sm">
                            <h3 className="font-semibold text-slate-700 mb-2">Añadir nuevo soporte</h3>
@@ -280,198 +310,185 @@ const DossierDetail: React.FC = () => {
              {viewingImage && (
                 <ImagePreviewModal imageUrl={viewingImage} onClose={() => setViewingImage(null)} />
             )}
+            <RejectionModal 
+                isOpen={rejectionModal.isOpen}
+                onClose={handleCloseRejectionModal}
+                onConfirm={handleConfirmRejection}
+                reason={rejectionReason}
+                setReason={setRejectionReason}
+            />
         </div>
     );
 };
 
 interface SupportCardProps {
     support: Support;
+    userRole?: 'ENTITY' | 'DIPUTACION';
     onAddEvidence: (type: EvidenceType, value: string | File) => void;
     onRemoveEvidence: (evidenceId: string) => void;
     onRemoveSupport: () => void;
+    onUpdateStatus: (supportId: string, status: SupportStatus) => void;
+    onRejectWithReason: () => void;
     isUploading: boolean;
     isEditable: boolean;
+    isReviewable: boolean;
     evidenceError: string | null;
     onViewImage: (url: string) => void;
 }
 
-const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, isUploading, isEditable, evidenceError, onViewImage }) => {
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const [showAddForm, setShowAddForm] = useState(false);
-    const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
+const SupportCard: React.FC<SupportCardProps> = (props) => {
+    const { support, userRole, onAddEvidence, onRemoveEvidence, onRemoveSupport, onUpdateStatus, onRejectWithReason, isUploading, isEditable, isReviewable, evidenceError, onViewImage } = props;
+    const [isCollapsed, setIsCollapsed] = useState(support.status === SupportStatus.APPROVED);
     const [urlValue, setUrlValue] = useState('');
-    const [fileValue, setFileValue] = useState<File | null>(null);
 
-    const urlEvidences = support.evidences.filter(e => e.type === EvidenceType.URL);
-    const imageEvidences = support.evidences.filter(e => e.type === EvidenceType.IMAGE);
-
-    const handleAddClick = () => {
-        if (!urlValue && !fileValue) return;
-        if (evidenceType === EvidenceType.URL) onAddEvidence(EvidenceType.URL, urlValue);
-        if (evidenceType === EvidenceType.IMAGE && fileValue) onAddEvidence(EvidenceType.IMAGE, fileValue);
-        setUrlValue('');
-        setFileValue(null);
-        setShowAddForm(false);
+    const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files?.[0]) {
+            onAddEvidence(EvidenceType.IMAGE, e.target.files[0]);
+            e.target.value = ''; // Reset file input
+        }
     };
+    
+    const handleAddUrl = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (urlValue.trim()) {
+            onAddEvidence(EvidenceType.URL, urlValue);
+            setUrlValue('');
+        }
+    };
+    
+    const StatusBadge = supportStatusStyles[support.status].icon;
 
     return (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden transition-all duration-300">
-            <div className="p-5 border-b flex justify-between items-center bg-slate-50 cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
-                <div className="flex items-center gap-3">
-                    <button 
-                        className="text-slate-500 hover:text-sky-600"
-                        aria-expanded={!isCollapsed}
-                        aria-controls={`support-content-${support.id}`}
-                    >
-                        {isCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-                    </button>
-                    <h3 className="text-lg font-semibold text-slate-800 select-none">{support.type}</h3>
+         <div className="bg-white rounded-lg shadow-sm transition-shadow duration-300 hover:shadow-md">
+            <div className="p-4 border-b flex justify-between items-center cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+                <div className="flex items-center space-x-3">
+                     <span className={`p-1.5 rounded-full ${supportStatusStyles[support.status].badge}`}>
+                        <StatusBadge size={20} />
+                    </span>
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-800">{support.type}</h2>
+                        {support.status === SupportStatus.REJECTED && support.rejectionReason && (
+                           <p className="text-sm text-red-600 mt-1"><strong>Motivo:</strong> {support.rejectionReason}</p>
+                        )}
+                    </div>
                 </div>
-                {isEditable && (
-                     <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition z-10">
-                        <Trash2 size={18} />
-                    </button>
-                )}
+                <div className="flex items-center space-x-4">
+                    {isEditable && (
+                        <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition p-1 rounded-full"><Trash2 size={18} /></button>
+                    )}
+                    {isCollapsed ? <ChevronDown size={20} className="text-slate-500" /> : <ChevronUp size={20} className="text-slate-500" />}
+                </div>
             </div>
-            <div 
-              id={`support-content-${support.id}`}
-              className={`transition-all duration-500 ease-in-out overflow-hidden ${isCollapsed ? 'max-h-0' : 'max-h-[1500px]'}`}
-            >
-                <div className="p-5">
-                    {support.evidences.length === 0 && !showAddForm && (
-                         <div className="text-center py-4 text-slate-500">
-                            <FileText size={32} className="mx-auto text-slate-300" />
-                            <p className="mt-2 text-sm">No hay evidencias para este soporte.</p>
-                         </div>
-                    )}
-                    
-                    {urlEvidences.length > 0 && (
-                        <div className="space-y-3">
-                            {urlEvidences.map(evidence => (
-                                <div key={evidence.id} className="p-3 bg-slate-50 rounded-md border flex justify-between items-center">
-                                    <div className="flex items-center space-x-3 break-all">
-                                        <LinkIcon size={18} className="text-sky-600 flex-shrink-0" />
-                                        <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-700 hover:underline">
-                                            {evidence.value}
-                                        </a>
-                                    </div>
-                                    {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {imageEvidences.length > 0 && (
-                        <div className={urlEvidences.length > 0 ? 'mt-4' : ''}>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                                 {imageEvidences.map(evidence => (
-                                    <div key={evidence.id} className="group relative">
-                                        <button 
-                                            onClick={() => onViewImage(evidence.value)} 
-                                            className="w-full h-24 block rounded-md overflow-hidden border focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
-                                            aria-label={`Ver imagen ${evidence.fileName}`}
-                                        >
-                                            <img src={evidence.value} alt={evidence.fileName} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
-                                        </button>
-                                        <p className="text-xs text-slate-500 mt-1 truncate" title={evidence.fileName}>{evidence.fileName}</p>
-                                        {isEditable && (
-                                            <button 
-                                                onClick={() => onRemoveEvidence(evidence.id)} 
-                                                className="absolute top-1 right-1 bg-white/70 p-1 rounded-full text-slate-500 hover:text-red-500 hover:bg-white transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
-                                                aria-label={`Eliminar imagen ${evidence.fileName}`}
-                                            >
-                                                <X size={14} />
-                                            </button>
+            
+            {!isCollapsed && (
+                 <div className="p-4 space-y-4">
+                    {support.evidences.length === 0 ? (
+                        <p className="text-sm text-slate-500 text-center py-4">No hay evidencias para este soporte.</p>
+                    ) : (
+                        <ul className="space-y-2">
+                           {support.evidences.map(evidence => (
+                                <li key={evidence.id} className="flex items-center justify-between bg-slate-50 p-2 rounded-md">
+                                    <div className="flex items-center space-x-2 overflow-hidden">
+                                        {evidence.type === EvidenceType.IMAGE ? (
+                                            <>
+                                                <Paperclip size={16} className="text-slate-500 flex-shrink-0" />
+                                                <button onClick={() => onViewImage(evidence.value)} className="text-sm text-sky-600 hover:underline truncate" title={evidence.fileName}>
+                                                    {evidence.fileName || 'Ver imagen'}
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <LinkIcon size={16} className="text-slate-500 flex-shrink-0" />
+                                                <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-600 hover:underline truncate" title={evidence.value}>
+                                                    {evidence.value}
+                                                </a>
+                                            </>
                                         )}
                                     </div>
-                                ))}
-                            </div>
-                        </div>
+                                    {isEditable && (
+                                        <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-600 p-1 rounded-full flex-shrink-0"><X size={16} /></button>
+                                    )}
+                                </li>
+                            ))}
+                        </ul>
                     )}
 
                     {isEditable && (
-                        <div className={support.evidences.length > 0 || evidenceError ? 'mt-6' : ''}>
-                            {evidenceError && (
-                                <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
-                                    <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
-                                    <span>{evidenceError}</span>
-                                </div>
-                            )}
-                            {showAddForm ? (
-                                <div className="pt-4 border-t">
-                                    <div className="flex space-x-2 mb-3">
-                                        <button onClick={() => setEvidenceType(EvidenceType.URL)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.URL ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Enlace</button>
-                                        <button onClick={() => setEvidenceType(EvidenceType.IMAGE)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.IMAGE ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Imagen</button>
-                                    </div>
-                                    {evidenceType === EvidenceType.URL ? (
-                                        <input type="url" value={urlValue} onChange={e => setUrlValue(e.target.value)} placeholder="https://ejemplo.com" className="w-full px-3 py-2 border rounded-md" />
-                                    ) : (
-                                        <input type="file" accept="image/*" onChange={(e: ChangeEvent<HTMLInputElement>) => setFileValue(e.target.files ? e.target.files[0] : null)} className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100" />
-                                    )}
-                                    <div className="flex justify-end space-x-2 mt-3">
-                                        <button onClick={() => setShowAddForm(false)} className="px-3 py-1.5 text-sm bg-slate-100 rounded-md">Cancelar</button>
-                                        <button onClick={handleAddClick} disabled={isUploading} className="px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md flex items-center min-w-[70px] justify-center">
-                                            {isUploading ? <Spinner className="h-4 w-4" /> : 'Añadir'}
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                 <button onClick={() => setShowAddForm(true)} className="w-full flex justify-center items-center space-x-2 py-2 border-2 border-dashed rounded-lg text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
-                                    <Plus size={18} />
-                                    <span>Añadir Evidencia</span>
-                                </button>
-                            )}
+                        <div className="border-t pt-4 space-y-3">
+                           <h4 className="text-sm font-medium text-slate-600">Añadir evidencia</h4>
+                            {evidenceError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded">{evidenceError}</p>}
+                            <form onSubmit={handleAddUrl} className="flex items-center gap-2">
+                                <input type="url" value={urlValue} onChange={(e) => setUrlValue(e.target.value)} placeholder="https://ejemplo.com" className="flex-grow w-full px-3 py-1.5 border border-slate-300 rounded-md text-sm focus:ring-1 focus:ring-sky-500" />
+                                <button type="submit" className="bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-sm px-3 py-1.5 rounded-md transition whitespace-nowrap">Añadir URL</button>
+                            </form>
+                             <div className="text-center text-sm text-slate-400">o</div>
+                             <label className={`relative flex justify-center items-center w-full px-3 py-2 border-2 border-dashed border-slate-300 rounded-md cursor-pointer hover:bg-slate-50 transition ${isUploading ? 'opacity-50' : ''}`}>
+                                {isUploading ? (
+                                    <> <Spinner className="h-4 w-4 mr-2" /> <span>Subiendo...</span> </>
+                                ) : (
+                                    <> <Paperclip size={16} className="mr-2" /> <span>Subir Imagen</span> </>
+                                )}
+                                <input type="file" accept="image/png, image/jpeg, image/webp" onChange={handleFileChange} className="hidden" disabled={isUploading} />
+                            </label>
+                        </div>
+                    )}
+
+                    {isReviewable && (
+                        <div className="border-t pt-4 flex justify-end space-x-2">
+                            <button onClick={() => onUpdateStatus(support.id, SupportStatus.APPROVED)} className="flex items-center space-x-1 text-sm bg-green-100 text-green-700 hover:bg-green-200 px-3 py-1.5 rounded-md transition">
+                                <CheckCircle size={16} /><span>Aprobar</span>
+                            </button>
+                            <button onClick={onRejectWithReason} className="flex items-center space-x-1 text-sm bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-md transition">
+                                <Flag size={16} /><span>Notificar Incidencia</span>
+                            </button>
                         </div>
                     )}
                 </div>
+            )}
+        </div>
+    );
+};
+
+const ImagePreviewModal: React.FC<{ imageUrl: string; onClose: () => void }> = ({ imageUrl, onClose }) => {
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="relative max-w-4xl max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+                <img src={imageUrl} alt="Vista previa de evidencia" className="object-contain max-w-full max-h-[90vh] rounded-lg" />
+                <button
+                    onClick={onClose}
+                    className="absolute top-2 right-2 bg-white rounded-full p-1 text-slate-700 hover:bg-slate-200 transition"
+                    aria-label="Cerrar vista previa"
+                >
+                    <X size={24} />
+                </button>
             </div>
         </div>
     );
 };
 
 
-interface ImagePreviewModalProps {
-  imageUrl: string;
-  onClose: () => void;
+const RejectionModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; reason: string; setReason: (reason: string) => void; }> = ({ isOpen, onClose, onConfirm, reason, setReason }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Notificar Incidencia</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Describe brevemente el motivo por el cual este soporte no es válido. La entidad verá este mensaje.
+                </p>
+                <textarea
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    className="w-full h-24 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-sky-500"
+                    placeholder="Ej: La imagen no muestra claramente el logo de la Diputación."
+                />
+                <div className="mt-5 flex justify-end gap-3">
+                    <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-md hover:bg-slate-200">Cancelar</button>
+                    <button type="button" onClick={onConfirm} disabled={!reason.trim()} className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-red-300">Enviar Notificación</button>
+                </div>
+            </div>
+        </div>
+    );
 }
-
-const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ imageUrl, onClose }) => {
-  useEffect(() => {
-    const handleEsc = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleEsc);
-    return () => {
-      window.removeEventListener('keydown', handleEsc);
-    };
-  }, [onClose]);
-
-  return (
-    <div 
-      className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4 animate-fade-in" 
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Vista previa de la imagen"
-    >
-      <style>{`
-        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
-      `}</style>
-      <button onClick={onClose} className="absolute top-4 right-4 text-white hover:text-slate-300 z-10" aria-label="Cerrar vista previa">
-        <X size={32} />
-      </button>
-      <div className="relative" onClick={(e) => e.stopPropagation()}>
-        <img 
-          src={imageUrl} 
-          alt="Vista previa de la evidencia" 
-          className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl object-contain"
-        />
-      </div>
-    </div>
-  );
-};
 
 export default DossierDetail;

@@ -26,6 +26,13 @@ export enum EvidenceType {
   IMAGE = 'image'
 }
 
+export enum SupportStatus {
+  PENDING = 'Pendiente',
+  APPROVED = 'Aprobado',
+  REJECTED = 'Rechazado'
+}
+
+
 export interface Evidence {
   id: string;
   type: EvidenceType;
@@ -37,6 +44,8 @@ export interface Support {
   id: string;
   type: string; // From SUPPORT_TYPES constant
   evidences: Evidence[];
+  status: SupportStatus;
+  rejectionReason?: string;
 }
 
 export interface Dossier {

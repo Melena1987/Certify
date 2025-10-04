@@ -5,7 +5,7 @@ import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { Link } from 'react-router-dom';
 import type { Dossier, Support } from '../types';
-import { DossierStatus } from '../types';
+import { DossierStatus, SupportStatus } from '../types';
 import Spinner from './Spinner';
 import { Plus, X, Calendar, FileText, ChevronsRight, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -197,7 +197,8 @@ Si no encuentras algún dato, déjalo como un string vacío. Si no identificas s
                 .map((type: string) => ({
                     id: `${Date.now()}-${type.replace(/\s+/g, '-')}`,
                     type,
-                    evidences: []
+                    evidences: [],
+                    status: SupportStatus.PENDING,
                 }));
 
             await addDoc(collection(db, 'dossiers'), {
@@ -442,13 +443,15 @@ const Dashboard: React.FC = () => {
                                 <span>Ver detalles</span>
                                 <ChevronsRight size={18} className="ml-1"/>
                              </Link>
-                             <button
-                                onClick={() => setDossierToDelete(dossier)}
-                                className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors"
-                                aria-label={`Borrar dossier ${dossier.eventName}`}
-                            >
-                                <Trash2 size={18} />
-                            </button>
+                             {dossier.status === DossierStatus.DRAFT && (
+                                <button
+                                    onClick={() => setDossierToDelete(dossier)}
+                                    className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                    aria-label={`Borrar dossier ${dossier.eventName}`}
+                                >
+                                    <Trash2 size={18} />
+                                </button>
+                             )}
                          </div>
                     </div>
                 ))}
