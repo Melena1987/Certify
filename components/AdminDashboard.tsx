@@ -67,9 +67,12 @@ const EntityList: React.FC = () => {
     useEffect(() => {
         const fetchEntities = async () => {
             try {
-                const q = query(collection(db, "users"), where("role", "==", "ENTITY"), orderBy("entityName"));
+                // The query was likely failing silently without a composite index on (role, entityName).
+                // Removing orderBy from the query and sorting client-side fixes this.
+                const q = query(collection(db, "users"), where("role", "==", "ENTITY"));
                 const querySnapshot = await getDocs(q);
                 const entitiesData = querySnapshot.docs.map(doc => doc.data() as UserProfile);
+                entitiesData.sort((a, b) => a.entityName.localeCompare(b.entityName));
                 setEntities(entitiesData);
             } catch (error) {
                 console.error("Error fetching entities: ", error);
@@ -84,17 +87,25 @@ const EntityList: React.FC = () => {
 
     return (
          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold text-slate-700 mb-4">Entidades Registradas</h2>
-            <ul className="divide-y divide-slate-200">
-                {entities.map(entity => (
-                    <li key={entity.uid} className="py-3 flex items-center justify-between">
-                        <div>
-                            <p className="font-medium text-slate-800">{entity.entityName}</p>
-                            <p className="text-sm text-slate-500">{entity.email}</p>
-                        </div>
-                    </li>
-                ))}
-            </ul>
+            <h2 className="text-xl font-semibold text-slate-700 mb-4">Entidades Registradas ({entities.length})</h2>
+            {entities.length > 0 ? (
+                <ul className="divide-y divide-slate-200">
+                    {entities.map(entity => (
+                        <li key={entity.uid} className="py-3 flex items-center justify-between">
+                            <div>
+                                <p className="font-medium text-slate-800">{entity.entityName}</p>
+                                <p className="text-sm text-slate-500">{entity.email}</p>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            ) : (
+                <div className="text-center py-10">
+                    <Building size={48} className="mx-auto text-slate-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
+                    <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
+                </div>
+            )}
         </div>
     )
 }
