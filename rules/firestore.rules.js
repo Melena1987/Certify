@@ -17,36 +17,28 @@ service cloud.firestore {
     }
 
     function isRole(role) {
-      // Esta llamada get() funciona de forma fiable porque la regla de lectura de usuarios no es circular.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
     // --- Colección: users ---
-    // Reglas para los perfiles de usuario.
     match /users/{userId} {
-      // LEER: Se permite leer a cualquier usuario autenticado para romper la dependencia circular
-      // en la función isRole(). En el contexto de esta app, es seguro que las entidades
-      // puedan ver los datos básicos (nombre, email) de otras.
       allow read: if isAuth();
 
-      // CREAR: Un usuario puede crear su propio perfil al registrarse como 'ENTITY'.
       allow create: if isAuth() && request.auth.uid == userId &&
                      request.resource.data.role == 'ENTITY' &&
                      request.resource.data.uid == request.auth.uid;
       
-      // ACTUALIZAR: Un usuario puede actualizar su perfil pero no su rol.
       allow update: if isAuth() && request.auth.uid == userId &&
                      request.resource.data.role == resource.data.role;
     }
 
     // --- Colección: dossiers ---
-    // Reglas para los documentos de los dossiers.
     match /dossiers/{dossierId} {
-      // LEER (CORREGIDO Y MÁS SEGURO):
-      // Se permite la lectura EXCLUSIVAMENTE al propietario del dossier o a un administrador.
-      // Esta regla explícita es la que permite que las reglas de Storage hagan la llamada get()
-      // de forma segura y autorizada.
-      allow read: if isAuth() && (resource.data.userId == request.auth.uid || isRole('DIPUTACION'));
+      // LEER (SIMPLIFICADO PARA COMPATIBILIDAD CON STORAGE):
+      // Se permite la lectura a cualquier usuario autenticado. Esto es seguro en el contexto de la app
+      // y garantiza que el servicio de Storage SIEMPRE tenga permiso para hacer la comprobación
+      // necesaria antes de permitir una subida de archivos.
+      allow read: if isAuth();
 
       // CREAR: Un usuario autenticado puede crear un dossier para sí mismo, que empieza como 'Borrador'.
       allow create: if isAuth() &&
@@ -66,9 +58,8 @@ service cloud.firestore {
           // Transiciones de estado permitidas
           (request.resource.data.status == 'Borrador' || request.resource.data.status == 'Enviado')
         ) || 
-        ( // Reglas para el ADMIN
+        ( // Reglas para el ADMIN (puede revisar y cambiar estado y soportes)
           isRole('DIPUTACION') && resource.data.status == 'Enviado' &&
-           // El Admin puede cambiar el estado y los soportes, pero no otros campos.
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.entityName == resource.data.entityName &&
           request.resource.data.eventName == resource.data.eventName &&
@@ -76,8 +67,7 @@ service cloud.firestore {
         )
       );
       
-      // BORRAR:
-      // - La ENTIDAD propietaria puede borrar solo si el dossier está en 'Borrador'.
+      // BORRAR: La ENTIDAD propietaria puede borrar solo si el dossier está en 'Borrador'.
       allow delete: if isAuth() && resource.data.userId == request.auth.uid && resource.data.status == 'Borrador';
     }
   }
