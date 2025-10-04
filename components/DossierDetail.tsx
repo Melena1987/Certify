@@ -30,6 +30,8 @@ const DossierDetail: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isUploading, setIsUploading] = useState<string | null>(null);
     const [evidenceError, setEvidenceError] = useState<Record<string, string | null>>({});
+    const [viewingImage, setViewingImage] = useState<string | null>(null);
+
 
     useEffect(() => {
         if (!id) {
@@ -247,6 +249,7 @@ const DossierDetail: React.FC = () => {
                         isUploading={isUploading === support.id}
                         isEditable={dossier.status === DossierStatus.DRAFT}
                         evidenceError={evidenceError[support.id] || null}
+                        onViewImage={setViewingImage}
                     />
                 ))}
             </div>
@@ -274,6 +277,9 @@ const DossierDetail: React.FC = () => {
                     </div>
                 </div>
             )}
+             {viewingImage && (
+                <ImagePreviewModal imageUrl={viewingImage} onClose={() => setViewingImage(null)} />
+            )}
         </div>
     );
 };
@@ -286,13 +292,17 @@ interface SupportCardProps {
     isUploading: boolean;
     isEditable: boolean;
     evidenceError: string | null;
+    onViewImage: (url: string) => void;
 }
 
-const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, isUploading, isEditable, evidenceError }) => {
+const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, isUploading, isEditable, evidenceError, onViewImage }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
     const [urlValue, setUrlValue] = useState('');
     const [fileValue, setFileValue] = useState<File | null>(null);
+
+    const urlEvidences = support.evidences.filter(e => e.type === EvidenceType.URL);
+    const imageEvidences = support.evidences.filter(e => e.type === EvidenceType.IMAGE);
 
     const handleAddClick = () => {
         if (!urlValue && !fileValue) return;
@@ -313,39 +323,67 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
                     </button>
                 )}
             </div>
-            <div className="p-5 space-y-4">
+            <div className="p-5">
                 {support.evidences.length === 0 && !showAddForm && (
                      <div className="text-center py-4 text-slate-500">
                         <FileText size={32} className="mx-auto text-slate-300" />
                         <p className="mt-2 text-sm">No hay evidencias para este soporte.</p>
                      </div>
                 )}
-                {support.evidences.map(evidence => (
-                    <div key={evidence.id} className="p-3 bg-slate-50 rounded-md border">
-                        <div className="flex justify-between items-start">
-                            <div className="flex items-center space-x-3 break-all">
-                                {evidence.type === EvidenceType.URL ? <LinkIcon size={18} className="text-sky-600 flex-shrink-0" /> : <Paperclip size={18} className="text-sky-600 flex-shrink-0" />}
-                                <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-700 hover:underline">
-                                    {evidence.type === EvidenceType.URL ? evidence.value : evidence.fileName}
-                                </a>
+                
+                {urlEvidences.length > 0 && (
+                    <div className="space-y-3">
+                        {urlEvidences.map(evidence => (
+                            <div key={evidence.id} className="p-3 bg-slate-50 rounded-md border flex justify-between items-center">
+                                <div className="flex items-center space-x-3 break-all">
+                                    <LinkIcon size={18} className="text-sky-600 flex-shrink-0" />
+                                    <a href={evidence.value} target="_blank" rel="noopener noreferrer" className="text-sm text-sky-700 hover:underline">
+                                        {evidence.value}
+                                    </a>
+                                </div>
+                                {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
                             </div>
-                           {isEditable && <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-500 ml-2 flex-shrink-0"><X size={16} /></button>}
-                        </div>
-                        {evidence.type === EvidenceType.IMAGE && (
-                            <img src={evidence.value} alt={evidence.fileName} className="mt-3 rounded-md max-h-60 object-contain border" />
-                        )}
+                        ))}
                     </div>
-                ))}
+                )}
+
+                {imageEvidences.length > 0 && (
+                    <div className={urlEvidences.length > 0 ? 'mt-4' : ''}>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                             {imageEvidences.map(evidence => (
+                                <div key={evidence.id} className="group relative">
+                                    <button 
+                                        onClick={() => onViewImage(evidence.value)} 
+                                        className="w-full h-24 block rounded-md overflow-hidden border focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2"
+                                        aria-label={`Ver imagen ${evidence.fileName}`}
+                                    >
+                                        <img src={evidence.value} alt={evidence.fileName} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110" />
+                                    </button>
+                                    <p className="text-xs text-slate-500 mt-1 truncate" title={evidence.fileName}>{evidence.fileName}</p>
+                                    {isEditable && (
+                                        <button 
+                                            onClick={() => onRemoveEvidence(evidence.id)} 
+                                            className="absolute top-1 right-1 bg-white/70 p-1 rounded-full text-slate-500 hover:text-red-500 hover:bg-white transition-opacity opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            aria-label={`Eliminar imagen ${evidence.fileName}`}
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 {isEditable && (
-                    <>
+                    <div className={support.evidences.length > 0 || evidenceError ? 'mt-6' : ''}>
                         {evidenceError && (
-                            <div className="p-3 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
+                            <div className="p-3 mb-4 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
                                 <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
                                 <span>{evidenceError}</span>
                             </div>
                         )}
-                        {showAddForm && (
+                        {showAddForm ? (
                             <div className="pt-4 border-t">
                                 <div className="flex space-x-2 mb-3">
                                     <button onClick={() => setEvidenceType(EvidenceType.URL)} className={`px-3 py-1.5 text-sm rounded-md ${evidenceType === EvidenceType.URL ? 'bg-sky-600 text-white' : 'bg-slate-200 text-slate-700'}`}>Enlace</button>
@@ -358,24 +396,67 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
                                 )}
                                 <div className="flex justify-end space-x-2 mt-3">
                                     <button onClick={() => setShowAddForm(false)} className="px-3 py-1.5 text-sm bg-slate-100 rounded-md">Cancelar</button>
-                                    <button onClick={handleAddClick} disabled={isUploading} className="px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md flex items-center">
-                                        {isUploading ? <Spinner className="h-4 w-4 mr-2" /> : null}
-                                        Añadir
+                                    <button onClick={handleAddClick} disabled={isUploading} className="px-3 py-1.5 text-sm bg-sky-600 text-white rounded-md flex items-center min-w-[70px] justify-center">
+                                        {isUploading ? <Spinner className="h-4 w-4" /> : 'Añadir'}
                                     </button>
                                 </div>
                             </div>
-                        )}
-                        {!showAddForm && (
+                        ) : (
                              <button onClick={() => setShowAddForm(true)} className="w-full flex justify-center items-center space-x-2 py-2 border-2 border-dashed rounded-lg text-slate-500 hover:bg-slate-50 hover:border-slate-400 transition">
                                 <Plus size={18} />
                                 <span>Añadir Evidencia</span>
                             </button>
                         )}
-                    </>
+                    </div>
                 )}
             </div>
         </div>
     );
+};
+
+
+interface ImagePreviewModalProps {
+  imageUrl: string;
+  onClose: () => void;
+}
+
+const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ imageUrl, onClose }) => {
+  useEffect(() => {
+    const handleEsc = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+    };
+  }, [onClose]);
+
+  return (
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-75 flex justify-center items-center z-50 p-4 animate-fade-in" 
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vista previa de la imagen"
+    >
+      <style>{`
+        @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
+      `}</style>
+      <button onClick={onClose} className="absolute top-4 right-4 text-white hover:text-slate-300 z-10" aria-label="Cerrar vista previa">
+        <X size={32} />
+      </button>
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
+        <img 
+          src={imageUrl} 
+          alt="Vista previa de la evidencia" 
+          className="max-w-[90vw] max-h-[90vh] rounded-lg shadow-2xl object-contain"
+        />
+      </div>
+    </div>
+  );
 };
 
 export default DossierDetail;
