@@ -17,14 +17,17 @@ service cloud.firestore {
     }
 
     function isRole(role) {
+      // This get() call now works reliably because the user read rule below is not circular.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
     }
 
     // --- Colección: users ---
     // Reglas para los perfiles de usuario.
     match /users/{userId} {
-      // LEER: Un usuario puede leer su propio perfil, o un admin de DIPUTACION puede leer cualquiera.
-      allow read: if isAuth() && (request.auth.uid == userId || isRole('DIPUTACION'));
+      // LEER: Se permite leer a cualquier usuario autenticado para romper la dependencia circular
+      // en la función isRole(). En el contexto de esta app, es seguro que las entidades
+      // puedan ver los datos básicos (nombre, email) de otras.
+      allow read: if isAuth();
 
       // CREAR: Un usuario puede crear su propio perfil al registrarse como 'ENTITY'.
       allow create: if isAuth() && request.auth.uid == userId &&
