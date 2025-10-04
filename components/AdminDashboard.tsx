@@ -5,7 +5,7 @@ import type { Dossier, UserProfile } from '../types';
 import { DossierStatus } from '../types';
 import Spinner from './Spinner';
 import { Link } from 'react-router-dom';
-import { Building, ChevronsRight, FileText, FolderCheck, FolderClock, FolderX } from 'lucide-react';
+import { Building, ChevronsRight, FileText, FolderCheck, FolderClock, FolderX, Search } from 'lucide-react';
 
 const statusConfig = {
     [DossierStatus.SUBMITTED]: {
@@ -60,7 +60,7 @@ const DossierList: React.FC<{ dossiers: Dossier[], status: DossierStatus }> = ({
     );
 };
 
-const EntityList: React.FC = () => {
+const EntityList: React.FC<{ searchTerm: string }> = ({ searchTerm }) => {
     const [entities, setEntities] = useState<UserProfile[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -82,17 +82,34 @@ const EntityList: React.FC = () => {
         };
         fetchEntities();
     }, []);
+    
+    const filteredEntities = entities.filter(entity =>
+        entity.entityName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (entity.email && entity.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
 
     if (loading) return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
 
     return (
          <div className="bg-white rounded-lg shadow">
             <div className="p-6 border-b">
-              <h2 className="text-xl font-semibold text-slate-700">Entidades Registradas ({entities.length})</h2>
+              <h2 className="text-xl font-semibold text-slate-700">Entidades Registradas ({filteredEntities.length})</h2>
             </div>
-            {entities.length > 0 ? (
+            {entities.length === 0 ? (
+                 <div className="text-center py-10 px-6">
+                    <Building size={48} className="mx-auto text-slate-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
+                    <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
+                </div>
+            ) : filteredEntities.length === 0 ? (
+                <div className="text-center py-10 px-6">
+                    <Building size={48} className="mx-auto text-slate-400" />
+                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No se encontraron entidades</h3>
+                    <p className="mt-1 text-slate-500 text-sm">Prueba con otro término de búsqueda.</p>
+                </div>
+            ) : (
                 <ul className="divide-y divide-slate-200">
-                    {entities.map(entity => (
+                    {filteredEntities.map(entity => (
                         <li key={entity.uid}>
                             <Link to={`/admin/entity/${entity.uid}`} className="block hover:bg-slate-50 transition-colors duration-200">
                                 <div className="py-4 px-6 flex items-center justify-between">
@@ -106,12 +123,6 @@ const EntityList: React.FC = () => {
                         </li>
                     ))}
                 </ul>
-            ) : (
-                <div className="text-center py-10 px-6">
-                    <Building size={48} className="mx-auto text-slate-400" />
-                    <h3 className="mt-4 text-lg font-semibold text-slate-600">No hay entidades registradas</h3>
-                    <p className="mt-1 text-slate-500 text-sm">Cuando una nueva entidad se registre, aparecerá aquí.</p>
-                </div>
             )}
         </div>
     )
@@ -122,6 +133,7 @@ const AdminDashboard: React.FC = () => {
     const [dossiers, setDossiers] = useState<Dossier[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'dossiers' | 'entities'>('dossiers');
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         setLoading(true);
@@ -143,10 +155,27 @@ const AdminDashboard: React.FC = () => {
         return () => unsubscribe();
     }, []);
 
+    const filteredDossiers = dossiers.filter(d => 
+        d.eventName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        d.entityName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
     return (
         <div>
             <h1 className="text-3xl font-bold text-slate-800 mb-2">Panel de Administración</h1>
             <p className="text-slate-500 mb-6">Gestiona los dossiers y entidades de la plataforma.</p>
+
+            <div className="mb-6 relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <input
+                    type="search"
+                    placeholder={activeTab === 'dossiers' ? "Buscar por evento o entidad..." : "Buscar por nombre o email de entidad..."}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
+                    aria-label="Buscar"
+                />
+            </div>
 
             <div className="mb-6 border-b border-slate-200">
                 <nav className="flex space-x-6">
@@ -169,19 +198,28 @@ const AdminDashboard: React.FC = () => {
                 <div className="flex justify-center items-center mt-16"><Spinner /></div>
             ) : activeTab === 'dossiers' ? (
                 <div className="space-y-8">
-                    <DossierList dossiers={dossiers} status={DossierStatus.SUBMITTED} />
-                    <DossierList dossiers={dossiers} status={DossierStatus.APPROVED} />
-                    <DossierList dossiers={dossiers} status={DossierStatus.REJECTED} />
-                    {dossiers.length === 0 && (
+                    {dossiers.length === 0 ? (
                         <div className="text-center py-16 bg-white rounded-lg shadow">
                             <FileText size={48} className="mx-auto text-slate-400" />
                             <h3 className="mt-4 text-xl font-semibold text-slate-700">No hay dossiers para revisar</h3>
                             <p className="mt-1 text-slate-500">Cuando una entidad envíe un dossier, aparecerá aquí.</p>
                         </div>
+                    ) : filteredDossiers.length === 0 ? (
+                         <div className="text-center py-16 bg-white rounded-lg shadow">
+                            <FileText size={48} className="mx-auto text-slate-400" />
+                            <h3 className="mt-4 text-xl font-semibold text-slate-700">No se encontraron resultados</h3>
+                            <p className="mt-1 text-slate-500">Prueba con otro término de búsqueda.</p>
+                        </div>
+                    ) : (
+                        <>
+                            <DossierList dossiers={filteredDossiers} status={DossierStatus.SUBMITTED} />
+                            <DossierList dossiers={filteredDossiers} status={DossierStatus.APPROVED} />
+                            <DossierList dossiers={filteredDossiers} status={DossierStatus.REJECTED} />
+                        </>
                     )}
                 </div>
             ) : (
-                <EntityList />
+                <EntityList searchTerm={searchTerm} />
             )}
         </div>
     );

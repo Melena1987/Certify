@@ -7,7 +7,7 @@ import { Link } from 'react-router-dom';
 import type { Dossier, Support } from '../types';
 import { DossierStatus, SupportStatus } from '../types';
 import Spinner from './Spinner';
-import { Plus, X, Calendar, FileText, ChevronsRight, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, X, Calendar, FileText, ChevronsRight, Sparkles, Trash2, AlertTriangle, Search } from 'lucide-react';
 import { GoogleGenAI, Type } from '@google/genai';
 import { SUPPORT_TYPES } from '../constants';
 import { useApiKey } from '../context/ApiKeyContext';
@@ -409,6 +409,7 @@ const Dashboard: React.FC = () => {
   const [isDeleteLoading, setIsDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const { apiKeyError } = useApiKey();
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     if (!currentUser) return;
@@ -483,6 +484,10 @@ const Dashboard: React.FC = () => {
     return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
   }
 
+  const filteredDossiers = dossiers.filter(dossier =>
+    dossier.eventName.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div>
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
@@ -501,6 +506,18 @@ const Dashboard: React.FC = () => {
                 </button>
             </div>
         </div>
+
+        <div className="mb-6 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+            <input
+                type="search"
+                placeholder="Buscar dossiers por nombre de evento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-sky-500"
+                aria-label="Buscar dossiers"
+            />
+        </div>
         
         {dossiers.length === 0 ? (
             <div className="text-center py-16 bg-white rounded-lg shadow">
@@ -508,9 +525,15 @@ const Dashboard: React.FC = () => {
                 <h3 className="mt-4 text-xl font-semibold text-slate-700">No hay dossiers todavía</h3>
                 <p className="mt-1 text-slate-500">Haz clic en "Crear Nuevo Dossier" para empezar.</p>
             </div>
+        ) : filteredDossiers.length === 0 ? (
+            <div className="text-center py-16 bg-white rounded-lg shadow">
+                <FileText size={48} className="mx-auto text-slate-400" />
+                <h3 className="mt-4 text-xl font-semibold text-slate-700">No se encontraron resultados</h3>
+                <p className="mt-1 text-slate-500">Prueba con otro término de búsqueda.</p>
+            </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {dossiers.map(dossier => (
+                {filteredDossiers.map(dossier => (
                     <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start">

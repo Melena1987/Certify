@@ -116,7 +116,7 @@ const EntityDossiers: React.FC = () => {
     if (loading) return <div className="flex justify-center items-center mt-16"><Spinner /></div>;
     if (error) return <div className="text-center py-10 text-red-600 bg-red-50 rounded-lg">{error}</div>;
     
-    const displayOrder: DossierStatus[] = [DossierStatus.SUBMITTED, DossierStatus.APPROVED, DossierStatus.REJECTED, DossierStatus.DRAFT];
+    const displayOrder: DossierStatus[] = [DossierStatus.SUBMITTED, DossierStatus.APPROVED, DossierStatus.REJECTED];
 
     return (
         <div>
