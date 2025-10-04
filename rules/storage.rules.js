@@ -16,7 +16,6 @@ service firebase.storage {
 
     // Verifica si el usuario autenticado es un administrador.
     function isAdmin() {
-      // Se asume que el perfil del usuario existe. La app debería garantizar esto.
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION';
     }
     
@@ -26,22 +25,12 @@ service firebase.storage {
     }
 
     // Verifica si el usuario puede escribir (subir/borrar) archivos en un dossier.
-    // Esta es la función clave que resuelve el problema de permisos.
     function canWriteToDossier(dossierId) {
-      // CORRECCIÓN ROBUSTA:
-      // 1. Usamos exists() que es más seguro. Falla de forma controlada si no se tiene
-      //    permiso de lectura o el documento no existe.
-      if (!exists(/databases/$(database)/documents/dossiers/$(dossierId))) {
-        return false;
-      }
-      
-      // 2. Si exists() es true, significa que tenemos permiso de lectura (gracias a la
-      //    regla de Firestore) y el documento existe. Ahora podemos obtener sus datos.
-      let dossierData = get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
-      
-      // 3. Verificamos la propiedad y el estado del dossier.
-      return dossierData.userId == request.auth.uid && 
-             dossierData.status == 'Borrador';
+      // Se comprueba que el documento del dossier exista, que el usuario sea el propietario
+      // y que el estado del dossier sea 'Borrador'. Todo en una única expresión booleana.
+      return exists(/databases/$(database)/documents/dossiers/$(dossierId)) &&
+             get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
+             get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
     }
 
     // --- Reglas para los Archivos de Dossiers ---
@@ -53,7 +42,7 @@ service firebase.storage {
       allow read: if request.auth != null && (isDossierOwner(dossierId) || isAdmin());
 
       // ESCRIBIR (Subir, Actualizar y Borrar):
-      // Permitido únicamente si la función robusta canWriteToDossier() devuelve true.
+      // Permitido únicamente si el usuario está autenticado y la función de permisos es verdadera.
       allow write: if request.auth != null && canWriteToDossier(dossierId);
     }
 
