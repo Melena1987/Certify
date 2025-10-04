@@ -60,6 +60,7 @@ const DossierDetail: React.FC = () => {
     
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isUploading, setIsUploading] = useState<string | null>(null);
+    const [evidenceError, setEvidenceError] = useState<Record<string, string | null>>({});
     const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
@@ -136,6 +137,7 @@ const DossierDetail: React.FC = () => {
         }
 
         setIsUploading(supportId);
+        setEvidenceError(prev => ({ ...prev, [supportId]: null }));
         
         try {
             let evidenceValue = '';
@@ -172,9 +174,15 @@ const DossierDetail: React.FC = () => {
             setDossier(prev => prev ? { ...prev, supports: newSupports } : null);
 
             await updateSupports(newSupports);
-        } catch (err) {
+        } catch (err: any) {
             console.error("Error adding evidence:", err);
-            alert("Ocurrió un error al añadir la evidencia. Se restaurará el estado anterior.");
+            let userMessage = "Ocurrió un error al añadir la evidencia. Se restaurará el estado anterior.";
+            if (err.code === 'storage/unauthorized') {
+                userMessage = "Error de permisos: No tienes autorización para subir este archivo. Asegúrate de que las reglas de Storage son correctas y que el dossier está en estado 'Borrador'.";
+            } else if (err.code) {
+                userMessage = `Error: ${err.code}. Por favor, inténtalo de nuevo.`;
+            }
+            setEvidenceError(prev => ({ ...prev, [supportId]: userMessage }));
             // Revert on failure
             setDossier(prev => prev ? { ...prev, supports: originalSupports } : null);
         } finally {
@@ -337,6 +345,7 @@ const DossierDetail: React.FC = () => {
                         analyzing={analyzing}
                         isEditable={dossier.status === DossierStatus.DRAFT}
                         apiKeyAvailable={!!apiKey}
+                        evidenceError={evidenceError[support.id] || null}
                     />
                 ))}
             </div>
@@ -378,9 +387,10 @@ interface SupportCardProps {
     analyzing: Record<string, boolean>;
     isEditable: boolean;
     apiKeyAvailable: boolean;
+    evidenceError: string | null;
 }
 
-const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, onAnalyzeEvidence, isUploading, analyzing, isEditable, apiKeyAvailable }) => {
+const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRemoveEvidence, onRemoveSupport, onAnalyzeEvidence, isUploading, analyzing, isEditable, apiKeyAvailable, evidenceError }) => {
     const [showAddForm, setShowAddForm] = useState(false);
     const [evidenceType, setEvidenceType] = useState<EvidenceType>(EvidenceType.URL);
     const [urlValue, setUrlValue] = useState('');
@@ -445,6 +455,12 @@ const SupportCard: React.FC<SupportCardProps> = ({ support, onAddEvidence, onRem
 
                 {isEditable && (
                     <>
+                        {evidenceError && (
+                            <div className="p-3 bg-red-50 text-red-700 text-sm rounded-md flex items-start space-x-2">
+                                <AlertTriangle size={18} className="flex-shrink-0 mt-0.5" />
+                                <span>{evidenceError}</span>
+                            </div>
+                        )}
                         {showAddForm && (
                             <div className="pt-4 border-t">
                                 <div className="flex space-x-2 mb-3">
