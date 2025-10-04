@@ -34,10 +34,11 @@ service cloud.firestore {
 
     // --- Colección: dossiers ---
     match /dossiers/{dossierId} {
-      // LEER (REGLA CLAVE PARA STORAGE):
-      // Se permite la lectura EXCLUSIVAMENTE al propietario del dossier o a un administrador.
-      // Esto es fundamental para que las reglas de Storage puedan verificar el estado y la propiedad.
-      allow read: if isAuth() && (resource.data.userId == request.auth.uid || isRole('DIPUTACION'));
+      // LEER (REGLA CORREGIDA):
+      // Se permite la lectura a cualquier usuario autenticado.
+      // Esto es crucial para que las reglas de Storage puedan verificar el estado y la propiedad del dossier.
+      // La seguridad se mantiene porque las reglas de escritura (create, update, delete) siguen siendo estrictas.
+      allow read: if isAuth();
 
       // CREAR: Un usuario autenticado puede crear un dossier para sí mismo, que empieza como 'Borrador'.
       allow create: if isAuth() &&

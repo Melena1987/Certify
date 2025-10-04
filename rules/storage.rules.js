@@ -17,25 +17,23 @@ service firebase.storage {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'DIPUTACION';
     }
 
-    function getDossierData(dossierId) {
-      // Obtiene la información del documento del dossier desde Firestore
-      return get(/databases/$(database)/documents/dossiers/$(dossierId)).data;
-    }
-
     // --- Reglas para los Archivos de Dossiers ---
     // Path: dossiers/{dossierId}/{supportId}/{fileName}
     match /dossiers/{dossierId}/{allPaths=**} {
       
       // LEER (Ver/Descargar): Permitido si el usuario es el propietario del dossier o un admin.
-      allow read: if request.auth != null && (getDossierData(dossierId).userId == request.auth.uid || isAdmin());
+      allow read: if request.auth != null && (get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid || isAdmin());
 
-      // ESCRIBIR (Subir/Actualizar/Borrar): Permitido únicamente si se cumplen TODAS estas condiciones:
+      // ESCRIBIR (Subir/Actualizar/Borrar): REGLA CORREGIDA Y MÁS ROBUSTA
+      // Se permite únicamente si se cumplen TODAS estas condiciones:
       // 1. El usuario está autenticado.
-      // 2. El 'userId' del dossier en Firestore coincide con el del usuario.
-      // 3. El 'status' del dossier en Firestore es 'Borrador'.
+      // 2. El documento del dossier existe en Firestore.
+      // 3. El 'userId' del dossier coincide con el del usuario.
+      // 4. El 'status' del dossier es 'Borrador'.
       allow write: if request.auth != null &&
-                      getDossierData(dossierId).userId == request.auth.uid &&
-                      getDossierData(dossierId).status == 'Borrador';
+                      exists(/databases/$(database)/documents/dossiers/$(dossierId)) &&
+                      get(/databases/$(database)/documents/dossiers/$(dossierId)).data.userId == request.auth.uid &&
+                      get(/databases/$(database)/documents/dossiers/$(dossierId)).data.status == 'Borrador';
     }
 
     // --- Reglas para Recursos Públicos (logo) ---
