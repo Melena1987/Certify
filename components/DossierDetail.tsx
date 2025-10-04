@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -8,7 +9,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType, SupportStatus } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronRight, CheckCircle, Flag, Info } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, AlertTriangle, FileText, ChevronRight, ChevronDown, CheckCircle, Flag, Info } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -405,7 +406,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                     {isEditable && (
                         <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition p-1 rounded-full"><Trash2 size={18} /></button>
                     )}
-                    <ChevronRight size={20} className={`text-slate-500 transition-transform duration-200 ease-in-out ${!isCollapsed ? 'rotate-90' : ''}`} />
+                    {isCollapsed ? <ChevronRight size={20} className="text-slate-500" /> : <ChevronDown size={20} className="text-slate-500" />}
                 </div>
             </div>
             
