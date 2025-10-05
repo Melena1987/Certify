@@ -227,8 +227,20 @@ const DossierDetail: React.FC = () => {
         }
 
         if (newEvidence) {
-            const newSupports = [...dossier.supports];
-            newSupports[supportIndex].evidences.push(newEvidence);
+            const newSupports = dossier.supports.map(s => {
+                if (s.id === supportId) {
+                    const updatedSupport = {
+                        ...s,
+                        evidences: [...s.evidences, newEvidence!],
+                    };
+                    if (s.status === SupportStatus.REJECTED) {
+                        updatedSupport.status = SupportStatus.PENDING;
+                        updatedSupport.rejectionReason = '';
+                    }
+                    return updatedSupport;
+                }
+                return s;
+            });
             await updateDossier({ supports: newSupports });
         }
     };
@@ -236,11 +248,8 @@ const DossierDetail: React.FC = () => {
     const handleRemoveEvidence = async (supportId: string, evidenceId: string) => {
         if (!dossier) return;
 
-        const supportIndex = dossier.supports.findIndex(s => s.id === supportId);
-        if (supportIndex === -1) return;
-
-        const support = dossier.supports[supportIndex];
-        const evidenceToRemove = support.evidences.find(e => e.id === evidenceId);
+        const support = dossier.supports.find(s => s.id === supportId);
+        const evidenceToRemove = support?.evidences.find(e => e.id === evidenceId);
 
         if (!evidenceToRemove) return;
 
@@ -258,9 +267,18 @@ const DossierDetail: React.FC = () => {
             }
         }
 
-        const newEvidences = support.evidences.filter(e => e.id !== evidenceId);
-        const newSupports = [...dossier.supports];
-        newSupports[supportIndex] = { ...support, evidences: newEvidences };
+        const newSupports = dossier.supports.map(s => {
+            if (s.id === supportId) {
+                const newEvidences = s.evidences.filter(e => e.id !== evidenceId);
+                const updatedSupport = { ...s, evidences: newEvidences };
+                if (s.status === SupportStatus.REJECTED) {
+                    updatedSupport.status = SupportStatus.PENDING;
+                    updatedSupport.rejectionReason = '';
+                }
+                return updatedSupport;
+            }
+            return s;
+        });
 
         await updateDossier({ supports: newSupports });
     };
@@ -432,23 +450,30 @@ const DossierDetail: React.FC = () => {
             {apiKeyError && <p className="mb-4 text-xs text-red-600 bg-red-50 p-2 rounded-md">{apiKeyError}</p>}
 
             <div className="space-y-6">
-                {dossier.supports.map(support => (
-                    <SupportCard 
-                        key={support.id} 
-                        support={support}
-                        userRole={userRole}
-                        onAddEvidence={(type, value) => handleAddEvidence(support.id, type, value)}
-                        onRemoveEvidence={(evidenceId) => handleRemoveEvidence(support.id, evidenceId)}
-                        onRemoveSupport={() => handleRemoveSupport(support.id)}
-                        onUpdateStatus={handleUpdateSupportStatus}
-                        onRejectWithReason={() => handleOpenRejectionModal(support.id)}
-                        isUploading={isUploading === support.id}
-                        isEditable={dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY'}
-                        isReviewable={dossier.status === DossierStatus.SUBMITTED && userRole === 'DIPUTACION'}
-                        evidenceError={evidenceError[support.id] || null}
-                        onViewImage={setViewingImage}
-                    />
-                ))}
+                {dossier.supports.map(support => {
+                    const isEntityUser = userRole === 'ENTITY';
+                    const isDossierDraft = dossier.status === DossierStatus.DRAFT;
+                    const isSupportRejected = support.status === SupportStatus.REJECTED;
+
+                    return (
+                        <SupportCard
+                            key={support.id}
+                            support={support}
+                            userRole={userRole}
+                            onAddEvidence={(type, value) => handleAddEvidence(support.id, type, value)}
+                            onRemoveEvidence={(evidenceId) => handleRemoveEvidence(support.id, evidenceId)}
+                            onRemoveSupport={() => handleRemoveSupport(support.id)}
+                            onUpdateStatus={handleUpdateSupportStatus}
+                            onRejectWithReason={() => handleOpenRejectionModal(support.id)}
+                            isUploading={isUploading === support.id}
+                            isReviewable={dossier.status === DossierStatus.SUBMITTED && userRole === 'DIPUTACION'}
+                            evidenceError={evidenceError[support.id] || null}
+                            onViewImage={setViewingImage}
+                            canEditEvidences={isEntityUser && (isDossierDraft || isSupportRejected)}
+                            canRemoveSupport={isEntityUser && isDossierDraft}
+                        />
+                    );
+                })}
             </div>
 
             {dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY' && (
@@ -517,14 +542,15 @@ interface SupportCardProps {
     onUpdateStatus: (supportId: string, status: SupportStatus) => void;
     onRejectWithReason: () => void;
     isUploading: boolean;
-    isEditable: boolean;
+    canEditEvidences: boolean;
+    canRemoveSupport: boolean;
     isReviewable: boolean;
     evidenceError: string | null;
     onViewImage: (url: string) => void;
 }
 
 const SupportCard: React.FC<SupportCardProps> = (props) => {
-    const { support, userRole, onAddEvidence, onRemoveEvidence, onRemoveSupport, onUpdateStatus, onRejectWithReason, isUploading, isEditable, isReviewable, evidenceError, onViewImage } = props;
+    const { support, userRole, onAddEvidence, onRemoveEvidence, onRemoveSupport, onUpdateStatus, onRejectWithReason, isUploading, canEditEvidences, canRemoveSupport, isReviewable, evidenceError, onViewImage } = props;
     const [isCollapsed, setIsCollapsed] = useState(support.status === SupportStatus.APPROVED);
     const [urlValue, setUrlValue] = useState('');
 
@@ -570,7 +596,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                     </div>
                 </div>
                 <div className="flex items-center space-x-4">
-                    {isEditable && (
+                    {canRemoveSupport && (
                         <button onClick={(e) => { e.stopPropagation(); onRemoveSupport(); }} className="text-slate-400 hover:text-red-600 transition p-1 rounded-full"><Trash2 size={18} /></button>
                     )}
                 </div>
@@ -594,7 +620,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                                                         {evidence.value}
                                                     </a>
                                                 </div>
-                                                {isEditable && (
+                                                {canEditEvidences && (
                                                     <button onClick={() => onRemoveEvidence(evidence.id)} className="text-slate-400 hover:text-red-600 p-1 rounded-full flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"><X size={16} /></button>
                                                 )}
                                             </li>
@@ -612,7 +638,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                                                 <button onClick={() => onViewImage(evidence.value)} className="w-full h-full rounded-md overflow-hidden focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 transition-transform duration-200 group-hover:scale-105">
                                                     <img src={evidence.value} alt={evidence.fileName || 'Evidencia'} className="w-full h-full object-cover" loading="lazy" />
                                                 </button>
-                                                {isEditable && (
+                                                {canEditEvidences && (
                                                     <button onClick={() => onRemoveEvidence(evidence.id)} className="absolute top-1 right-1 bg-black bg-opacity-50 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 focus:opacity-100" aria-label={`Eliminar imagen ${evidence.fileName}`}>
                                                         <X size={14} />
                                                     </button>
@@ -625,7 +651,7 @@ const SupportCard: React.FC<SupportCardProps> = (props) => {
                         </div>
                     )}
 
-                    {isEditable && (
+                    {canEditEvidences && (
                         <div className="border-t pt-4 space-y-3">
                            <h4 className="text-sm font-medium text-slate-600">Añadir evidencia</h4>
                             {evidenceError && <p className="text-xs text-red-600 bg-red-50 p-2 rounded-md">{evidenceError}</p>}
