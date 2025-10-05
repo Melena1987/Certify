@@ -533,37 +533,49 @@ const Dashboard: React.FC = () => {
             </div>
         ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredDossiers.map(dossier => (
-                    <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
-                        <div>
-                            <div className="flex justify-between items-start">
-                               <h2 className="text-xl font-bold text-slate-800 mb-2 pr-4 break-words">{dossier.eventName}</h2>
-                                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyles[dossier.status]} whitespace-nowrap h-fit`}>
-                                    {dossier.status}
-                                </span>
+                {filteredDossiers.map(dossier => {
+                    const hasIncidence = dossier.supports.some(s => s.status === SupportStatus.REJECTED);
+                    return (
+                        <div key={dossier.id} className="bg-white p-6 rounded-lg shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col justify-between">
+                            <div>
+                                <div className="flex justify-between items-start">
+                                   <h2 className="flex items-center gap-2 text-xl font-bold text-slate-800 mb-2 pr-4 break-words">
+                                       <span>{dossier.eventName}</span>
+                                       {hasIncidence && (
+                                            <AlertTriangle
+                                                className="h-5 w-5 text-red-500 flex-shrink-0"
+                                                aria-label="Dossier con incidencias"
+                                                title="Este dossier tiene soportes con incidencias que requieren tu atención."
+                                            />
+                                       )}
+                                   </h2>
+                                    <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusStyles[dossier.status]} whitespace-nowrap h-fit`}>
+                                        {dossier.status}
+                                    </span>
+                                </div>
+                                <div className="flex items-center space-x-2 text-slate-500 text-sm mt-4">
+                                    <Calendar size={16} />
+                                    <span>{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</span>
+                                </div>
                             </div>
-                            <div className="flex items-center space-x-2 text-slate-500 text-sm mt-4">
-                                <Calendar size={16} />
-                                <span>{new Date(dossier.eventDate).toLocaleDateString('es-ES')}</span>
-                            </div>
+                             <div className="border-t mt-4 pt-4 flex justify-between items-center">
+                                 <Link to={`/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
+                                    <span>Ver detalles</span>
+                                    <ChevronsRight size={18} className="ml-1"/>
+                                 </Link>
+                                 {dossier.status === DossierStatus.DRAFT && (
+                                    <button
+                                        onClick={() => setDossierToDelete(dossier)}
+                                        className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors"
+                                        aria-label={`Borrar dossier ${dossier.eventName}`}
+                                    >
+                                        <Trash2 size={18} />
+                                    </button>
+                                 )}
+                             </div>
                         </div>
-                         <div className="border-t mt-4 pt-4 flex justify-between items-center">
-                             <Link to={`/dossier/${dossier.id}`} className="flex items-center text-sky-600 font-medium text-sm hover:underline">
-                                <span>Ver detalles</span>
-                                <ChevronsRight size={18} className="ml-1"/>
-                             </Link>
-                             {dossier.status === DossierStatus.DRAFT && (
-                                <button
-                                    onClick={() => setDossierToDelete(dossier)}
-                                    className="text-slate-400 hover:text-red-600 p-1 rounded-full transition-colors"
-                                    aria-label={`Borrar dossier ${dossier.eventName}`}
-                                >
-                                    <Trash2 size={18} />
-                                </button>
-                             )}
-                         </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         )}
 
