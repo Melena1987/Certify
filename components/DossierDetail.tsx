@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
@@ -457,7 +458,7 @@ const DossierDetail: React.FC = () => {
             <div className="space-y-6">
                 {dossier.supports.map(support => {
                     const isSupportRejected = support.status === SupportStatus.REJECTED;
-                    const canEditEvidences = (isEntityUser && (isDossierDraft || isSupportRejected)) || (isDiputacionUser && isDossierSubmitted);
+                    const canEditEvidences = isEntityUser && (isDossierDraft || isSupportRejected);
                     const canRemoveSupport = (isEntityUser && isDossierDraft) || (isDiputacionUser && isDossierSubmitted);
 
                     return (
