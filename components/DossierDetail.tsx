@@ -1,8 +1,7 @@
 
-
 import React, { useState, useEffect, ChangeEvent } from 'react';
 import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
-import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { db, storage } from '../firebase';
 import { useAuth } from '../context/AuthContext';
@@ -10,7 +9,7 @@ import type { Dossier, Support, Evidence } from '../types';
 import { DossierStatus, EvidenceType, SupportStatus } from '../types';
 import { SUPPORT_TYPES } from '../constants';
 import Spinner from './Spinner';
-import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, FileText, ChevronRight, ChevronDown, CheckCircle, Flag, Download } from 'lucide-react';
+import { ArrowLeft, Paperclip, Link as LinkIcon, X, Plus, Trash2, FileText, ChevronRight, ChevronDown, CheckCircle, Flag, Download, AlertTriangle } from 'lucide-react';
 import { useApiKey } from '../context/ApiKeyContext';
 
 const dossierStatusStyles: { [key in DossierStatus]: { container: string, text: string } } = {
@@ -44,6 +43,9 @@ const DossierDetail: React.FC = () => {
     const [rejectionReason, setRejectionReason] = useState('');
     const [customSupportType, setCustomSupportType] = useState('');
     const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+    const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState('');
 
 
     useEffect(() => {
@@ -314,6 +316,45 @@ const DossierDetail: React.FC = () => {
         }
     };
 
+    const handleDeleteDossier = async () => {
+        if (!dossier) return;
+
+        setIsDeleting(true);
+        setDeleteError('');
+        try {
+            // Delete associated files from storage
+            const evidenceFiles: string[] = [];
+            dossier.supports.forEach(support => {
+                support.evidences.forEach(evidence => {
+                    if (evidence.type === EvidenceType.IMAGE) {
+                        evidenceFiles.push(evidence.value);
+                    }
+                });
+            });
+
+            for (const fileUrl of evidenceFiles) {
+                try {
+                    const fileRef = ref(storage, fileUrl);
+                    await deleteObject(fileRef);
+                } catch (error: any) {
+                    if (error.code !== 'storage/object-not-found') {
+                        console.error(`Failed to delete file ${fileUrl}:`, error);
+                    }
+                }
+            }
+            
+            const dossierRef = doc(db, 'dossiers', dossier.id);
+            await deleteDoc(dossierRef);
+            
+            navigate('/admin');
+
+        } catch (error) {
+            console.error("Error deleting dossier: ", error);
+            setDeleteError('No se pudo borrar el dossier. Comprueba tu conexión e inténtalo de nuevo.');
+            setIsDeleting(false);
+        }
+    };
+
     const handleDownloadPdf = async () => {
         if (!dossier) return;
 
@@ -421,6 +462,7 @@ const DossierDetail: React.FC = () => {
     const isDiputacionUser = userRole === 'DIPUTACION';
     const isDossierDraft = dossier.status === DossierStatus.DRAFT;
     const isDossierSubmitted = dossier.status === DossierStatus.SUBMITTED;
+    const canDeleteDossier = isDiputacionUser && (dossier.status === DossierStatus.SUBMITTED || dossier.status === DossierStatus.APPROVED);
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -447,6 +489,16 @@ const DossierDetail: React.FC = () => {
                             >
                                 {isGeneratingPdf ? <Spinner className="h-5 w-5"/> : <Download size={18} />}
                                 <span>{isGeneratingPdf ? 'Generando...' : 'Descargar PDF'}</span>
+                            </button>
+                        )}
+                        {canDeleteDossier && (
+                            <button
+                                onClick={() => setIsDeleteModalOpen(true)}
+                                disabled={isDeleting}
+                                className="flex items-center justify-center space-x-2 bg-red-500 text-white py-2 px-4 rounded-lg shadow-md hover:bg-red-600 transition disabled:bg-red-300 w-full sm:w-auto"
+                            >
+                                <Trash2 size={18} />
+                                <span>Borrar Dossier</span>
                             </button>
                         )}
                     </div>
@@ -550,6 +602,14 @@ const DossierDetail: React.FC = () => {
                 onConfirm={handleConfirmRejection}
                 reason={rejectionReason}
                 setReason={setRejectionReason}
+            />
+            <DeleteDossierConfirmationModal
+                isOpen={isDeleteModalOpen}
+                onClose={() => setIsDeleteModalOpen(false)}
+                onConfirm={handleDeleteDossier}
+                dossierName={dossier.eventName}
+                isLoading={isDeleting}
+                error={deleteError}
             />
         </div>
     );
@@ -749,6 +809,54 @@ const RejectionModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm
             </div>
         </div>
     );
-}
+};
+
+const DeleteDossierConfirmationModal: React.FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; dossierName: string; isLoading: boolean; error: string; }> = ({ isOpen, onClose, onConfirm, dossierName, isLoading, error }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4" onClick={onClose}>
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+                <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                        <AlertTriangle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">
+                            Borrar Dossier
+                        </h3>
+                        <div className="mt-2">
+                            <p className="text-sm text-gray-500">
+                                ¿Estás seguro de que quieres borrar el dossier "<strong>{dossierName}</strong>"? Todas las evidencias asociadas serán eliminadas permanentemente. Esta acción no se puede deshacer.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                 {error && (
+                    <div className="mt-4 bg-red-100 p-3 rounded-lg text-sm text-red-800" role="alert">
+                        <p>{error}</p>
+                    </div>
+                )}
+                <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+                    <button
+                        type="button"
+                        className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:w-auto sm:text-sm disabled:bg-red-400"
+                        onClick={onConfirm}
+                        disabled={isLoading}
+                    >
+                        {isLoading ? <Spinner className="h-5 w-5" /> : 'Borrar'}
+                    </button>
+                    <button
+                        type="button"
+                        className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 sm:mt-0 sm:w-auto sm:text-sm"
+                        onClick={onClose}
+                        disabled={isLoading}
+                    >
+                        Cancelar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default DossierDetail;
