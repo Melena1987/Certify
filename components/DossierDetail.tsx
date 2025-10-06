@@ -415,6 +415,11 @@ const DossierDetail: React.FC = () => {
     const statusStyle = dossierStatusStyles[dossier.status] || dossierStatusStyles[DossierStatus.DRAFT];
     const availableSupportTypes = SUPPORT_TYPES.filter(type => !dossier.supports.some(s => s.type === type));
     const backLink = userRole === 'DIPUTACION' ? '/admin' : '/';
+    
+    const isEntityUser = userRole === 'ENTITY';
+    const isDiputacionUser = userRole === 'DIPUTACION';
+    const isDossierDraft = dossier.status === DossierStatus.DRAFT;
+    const isDossierSubmitted = dossier.status === DossierStatus.SUBMITTED;
 
     return (
         <div className="max-w-4xl mx-auto">
@@ -451,9 +456,9 @@ const DossierDetail: React.FC = () => {
 
             <div className="space-y-6">
                 {dossier.supports.map(support => {
-                    const isEntityUser = userRole === 'ENTITY';
-                    const isDossierDraft = dossier.status === DossierStatus.DRAFT;
                     const isSupportRejected = support.status === SupportStatus.REJECTED;
+                    const canEditEvidences = (isEntityUser && (isDossierDraft || isSupportRejected)) || (isDiputacionUser && isDossierSubmitted);
+                    const canRemoveSupport = (isEntityUser && isDossierDraft) || (isDiputacionUser && isDossierSubmitted);
 
                     return (
                         <SupportCard
@@ -469,17 +474,17 @@ const DossierDetail: React.FC = () => {
                             isReviewable={dossier.status === DossierStatus.SUBMITTED && userRole === 'DIPUTACION'}
                             evidenceError={evidenceError[support.id] || null}
                             onViewImage={setViewingImage}
-                            canEditEvidences={isEntityUser && (isDossierDraft || isSupportRejected)}
-                            canRemoveSupport={isEntityUser && isDossierDraft}
+                            canEditEvidences={canEditEvidences}
+                            canRemoveSupport={canRemoveSupport}
                         />
                     );
                 })}
             </div>
 
-            {dossier.status === DossierStatus.DRAFT && userRole === 'ENTITY' && (
+            {((isDossierDraft && isEntityUser) || (isDossierSubmitted && isDiputacionUser)) && (
                  <div className="mt-8 border-t pt-6 space-y-4">
                     <div className="bg-white p-4 rounded-lg shadow-sm">
-                        <h3 className="font-semibold text-slate-700 mb-4">Añadir nuevo soporte</h3>
+                        <h3 className="font-semibold text-slate-700 mb-4">{isDiputacionUser ? 'Gestionar Soportes' : 'Añadir nuevo soporte'}</h3>
                         {availableSupportTypes.length > 0 && (
                             <div className="mb-4">
                                 <h4 className="text-xs font-semibold text-slate-500 uppercase mb-2 tracking-wider">Sugerencias</h4>
@@ -511,14 +516,30 @@ const DossierDetail: React.FC = () => {
                             </form>
                         </div>
                     </div>
-                    <div className="flex justify-end">
-                        <button onClick={handleSubmitDossier} disabled={isSubmitting} className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-6 rounded-lg transition flex items-center">
-                           {isSubmitting && <Spinner className="h-5 w-5 mr-2" />}
-                           Enviar Dossier para Revisión
-                        </button>
-                    </div>
+                    {isDossierDraft && isEntityUser && (() => {
+                        const hasEmptySupports = dossier.supports.some(s => s.evidences.length === 0);
+                        return (
+                            <div className="flex justify-end items-center gap-4">
+                                {hasEmptySupports && (
+                                    <p className="text-sm text-red-600">
+                                        Debes añadir al menos una evidencia a cada soporte.
+                                    </p>
+                                )}
+                                <button 
+                                    onClick={handleSubmitDossier} 
+                                    disabled={isSubmitting || hasEmptySupports} 
+                                    className="bg-sky-600 hover:bg-sky-700 text-white font-bold py-2 px-6 rounded-lg transition flex items-center disabled:bg-slate-400 disabled:cursor-not-allowed"
+                                    title={hasEmptySupports ? 'Debes añadir al menos una evidencia a cada soporte antes de enviar.' : ''}
+                                >
+                                {isSubmitting && <Spinner className="h-5 w-5 mr-2" />}
+                                Enviar Dossier para Revisión
+                                </button>
+                            </div>
+                        )
+                    })()}
                 </div>
             )}
+
              {viewingImage && (
                 <ImagePreviewModal imageUrl={viewingImage} onClose={() => setViewingImage(null)} />
             )}
